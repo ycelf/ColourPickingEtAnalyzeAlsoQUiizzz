@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>本地色彩拆解与分析工具 (PS/HSB 坐标系完整版)</title>
-<link rel="icon" type="image/png" href="my_icon.png?v=2">
+  <title>本地色彩拆解与分析工具 (PS/HSB/Histogram版)</title>
   <style>
     :root {
       --bg-color: #1a1a1a;
@@ -14,6 +13,8 @@
       --text-color: #e0e0e0;
       --accent-color: #00adb5;
       --active-color: #00fff5;
+      --input-bg: #333333;
+      --input-text: #ffffff;
     }
 
     body.theme-dark {
@@ -22,6 +23,8 @@
       --canvas-bg: #121212;
       --border-color: #3e3e3e;
       --text-color: #e0e0e0;
+      --input-bg: #333333;
+      --input-text: #ffffff;
     }
 
     body.theme-light {
@@ -30,6 +33,8 @@
       --canvas-bg: #e5e5e5;
       --border-color: #cccccc;
       --text-color: #1a1a1a;
+      --input-bg: #ffffff;
+      --input-text: #1a1a1a;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -56,23 +61,27 @@
     }
     
     .toolbar { 
-      padding: 10px; 
+      height: 46px;
+      padding: 0 12px; 
       background: var(--panel-bg);
       border-bottom: 1px solid var(--border-color); 
       display: flex; 
       align-items: center; 
       gap: 15px; 
+      flex-shrink: 0;
     }
     .btn { 
-      background: #333; 
-      color: #fff; 
+      background: var(--input-bg); 
+      color: var(--input-text); 
       border: 1px solid var(--border-color); 
       padding: 6px 12px; 
       border-radius: 4px; 
       cursor: pointer; 
       font-size: 13px; 
+      flex-shrink: 0;
+      height: 30px;
+      line-height: 1;
     }
-    body.theme-light .btn { background: #e0e0e0; color: #1a1a1a; }
     .btn:hover { border-color: var(--accent-color); }
     
     .canvas-container { 
@@ -85,21 +94,21 @@
     }
     #image-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
 
-    /* 中间：PS风格 HSB/HSV 2D色盘 */
+    /* 中间面板 */
     #center-pane { 
       width: 340px; 
       border-right: 1px solid var(--border-color); 
       display: flex; 
       flex-direction: column; 
-      padding: 15px; 
+      padding: 12px; 
       background: var(--panel-bg); 
-      gap: 12px; 
+      gap: 10px; 
       flex-shrink: 0;
       overflow-y: auto;
     }
     .panel-title { font-size: 13px; font-weight: bold; opacity: 0.8; margin-bottom: 4px; }
     
-    #hsb-picker-container { position: relative; width: 300px; height: 300px; margin: 0 auto; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; }
+    #hsb-picker-container { position: relative; width: 300px; height: 300px; margin: 0 auto; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; flex-shrink: 0; }
     #hsb-canvas { width: 100%; height: 100%; display: block; }
     
     #quiz-target-mask {
@@ -109,25 +118,76 @@
       z-index: 50;
     }
 
-    #hue-ring-container { position: relative; width: 300px; height: 20px; margin: 0 auto; }
+    #hue-ring-container { position: relative; width: 300px; height: 20px; margin: 0 auto; flex-shrink: 0; }
     #hue-canvas { width: 100%; height: 100%; border-radius: 10px; display: block; }
 
-    /* Quiz 板块内部独立调色盘 */
-    #quiz-section {
-      margin-top: 5px;
-      padding: 10px;
-      border: 1px dashed var(--border-color);
+    /* 折叠抽屉样式 (Accordion) */
+    .accordion-item {
+      border: 1px solid var(--border-color);
       border-radius: 6px;
-      background: rgba(0,0,0,0.08);
+      background: rgba(0,0,0,0.06);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .accordion-header {
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
       display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(0,0,0,0.1);
+    }
+    .accordion-header:hover { background: rgba(0,0,0,0.2); }
+    .accordion-body {
+      padding: 10px;
+      display: none;
       flex-direction: column;
       gap: 8px;
     }
+    .accordion-item.open .accordion-body { display: flex; }
 
-    #quiz-hsb-container { position: relative; width: 240px; height: 240px; margin: 0 auto; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; cursor: crosshair; }
+    /* 试色板 (Doodle Board) */
+    #doodle-canvas {
+      width: 280px;
+      height: 160px;
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      margin: 0 auto;
+      cursor: crosshair;
+      touch-action: none;
+    }
+    .tool-bar { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; font-size: 11px; }
+
+    /* 图标按钮样式 */
+    .icon-btn {
+      background: var(--input-bg);
+      border: 1px solid var(--border-color);
+      color: var(--input-text);
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 26px;
+    }
+    .icon-btn:hover { border-color: var(--accent-color); }
+    .icon-btn.active {
+      border-color: var(--active-color);
+      background: rgba(0, 173, 181, 0.25);
+      color: var(--active-color);
+    }
+
+    /* Quiz 盲测专有样式 */
+    #quiz-hsb-container { position: relative; width: 200px; height: 200px; margin: 0 auto; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; cursor: crosshair; }
     #quiz-hsb-canvas { width: 100%; height: 100%; display: block; }
 
-    #quiz-hue-container { position: relative; width: 240px; height: 16px; margin: 0 auto; cursor: pointer; }
+    #quiz-hue-container { position: relative; width: 200px; height: 16px; margin: 0 auto; cursor: pointer; }
     #quiz-hue-canvas { width: 100%; height: 100%; border-radius: 8px; display: block; }
 
     #quiz-picker-marker {
@@ -154,7 +214,7 @@
     .color-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px; }
     
     .color-item {
-      display: flex; align-items: center; gap: 10px; padding: 8px; background: rgba(0,0,0,0.12);
+      display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(0,0,0,0.12);
       border: 1px solid transparent; border-radius: 4px; cursor: grab; position: relative;
     }
     .color-item:active { cursor: grabbing; }
@@ -165,7 +225,7 @@
     
     .drag-handle { cursor: grab; opacity: 0.4; font-size: 13px; line-height: 1; }
     .color-preview { width: 28px; height: 28px; border-radius: 4px; border: 1px solid rgba(128,128,128,0.3); flex-shrink: 0; }
-    .color-info { flex: 1; font-family: monospace; font-size: 12px; transition: filter 0.2s; }
+    .color-info { flex: 1; font-family: monospace; font-size: 11px; transition: filter 0.2s; }
     
     .color-info.quiz-masked {
       filter: blur(5px);
@@ -173,6 +233,8 @@
       pointer-events: none;
     }
 
+    .copy-btn { opacity: 0.6; padding: 2px 5px; cursor: pointer; border-radius: 3px; font-size: 11px; }
+    .copy-btn:hover { opacity: 1; background: rgba(255,255,255,0.1); }
     .delete-btn { opacity: 0.6; padding: 2px 6px; cursor: pointer; border-radius: 3px; }
     .delete-btn:hover { opacity: 1; color: #ff5555; }
 
@@ -199,7 +261,21 @@
     }
     .hue-marker.selected { background: var(--active-color); width: 6px; z-index: 10; }
 
-    select { background: rgba(0,0,0,0.2); color: inherit; border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+    select, input[type=color] { 
+      background: var(--input-bg); 
+      color: var(--input-text); 
+      border: 1px solid var(--border-color); 
+      padding: 2px 6px; 
+      border-radius: 4px; 
+      font-size: 12px;
+      outline: none;
+      height: 28px;
+      flex-shrink: 0;
+      transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+    }
+    select:hover {
+      border-color: var(--accent-color);
+    }
   </style>
 </head>
 <body class="theme-dark">
@@ -210,30 +286,30 @@
     <div class="toolbar">
       <input type="file" id="file-input" accept="image/*" style="display: none;">
       <button class="btn" onclick="document.getElementById('file-input').click()">打开本地图片</button>
-      <label style="font-size: 13px;">采样：
+      <label style="font-size: 13px; display: flex; align-items: center; gap: 5px; flex-shrink: 0;">采样：
         <select id="sample-size">
           <option value="1">1x1 单像素</option>
           <option value="3" selected>3x3 区域平均</option>
           <option value="5">5x5 区域平均</option>
         </select>
       </label>
-      <label style="font-size: 13px;">背景：
+      <label style="font-size: 13px; display: flex; align-items: center; gap: 5px; flex-shrink: 0;">背景：
         <select id="theme-select" onchange="changeTheme(this.value)">
-          <option value="theme-dark">深色</option>
-          <option value="theme-light">浅色</option>
+          <option value="theme-dark">深色模式</option>
+          <option value="theme-light">浅色模式</option>
         </select>
       </label>
-      <span id="hover-color-val" style="font-family: monospace; font-size: 13px; margin-left: auto;">RGB: - | HSL: -</span>
+      <span id="hover-color-val" style="font-family: monospace; font-size: 13px; margin-left: auto; flex-shrink: 0;">RGB: - | HSV: -</span>
     </div>
     <div class="canvas-container" id="canvas-container">
       <canvas id="image-canvas"></canvas>
     </div>
-    <div style="padding: 6px 12px; font-size: 11px; opacity: 0.6; font-family: monospace; background: var(--panel-bg); border-top: 1px solid var(--border-color);">
-      操作提示：滚轮缩放 | 鼠标中键拖拽 | 左键取色（取色自动退出盲测模式）
+    <div style="padding: 6px 12px; font-size: 11px; opacity: 0.6; font-family: monospace; background: var(--panel-bg); border-top: 1px solid var(--border-color); flex-shrink: 0;">
+      操作提示：直接 Ctrl+V 粘贴剪贴板图片 | 滚轮缩放 | 鼠标中键拖拽 | 左键取色
     </div>
   </div>
 
-  <!-- 中间：PS风格 HSB 色盘 + 盲测挑战 -->
+  <!-- 中间：PS风格 HSB 色盘 + 试色草稿板 + 图像直方图 + Quiz 盲测 -->
   <div id="center-pane">
     <div class="panel-title" id="sl-title">PS 风格色盘 (原图色彩分析)</div>
     <div id="hsb-picker-container">
@@ -250,48 +326,85 @@
       </div>
     </div>
 
-    <!-- 盲测 Quiz 互动区 -->
-    <div id="quiz-section">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span class="panel-title" style="margin:0;">🎯 色彩记忆盲测 Challenge</span>
+    <!-- 可折叠抽屉 1：🎨 自由组合试色草稿板 -->
+    <div class="accordion-item open" id="accordion-doodle">
+      <div class="accordion-header" onclick="toggleAccordion('accordion-doodle')">
+        <span>🎨 自由组合试色板 (Doodle Sandbox)</span>
+        <span class="acc-icon">▼</span>
       </div>
-      
-      <!-- 准备界面 -->
-      <div id="quiz-start-view">
-        <p style="font-size: 11px; opacity: 0.7; margin-bottom: 8px;">考考你的绝对色感：尝试在专属调色盘上调出目标的真实颜色！</p>
-        <button class="btn" style="width: 100%;" onclick="startQuiz()">开始盲测挑战</button>
+      <div class="accordion-body">
+        <canvas id="doodle-canvas" width="280" height="160"></canvas>
+        <div class="tool-bar">
+          <button class="icon-btn active" id="btn-tool-brush" onclick="setDoodleTool('brush')" title="画笔">🖌️</button>
+          <button class="icon-btn" id="btn-tool-eraser" onclick="setDoodleTool('eraser')" title="橡皮擦">🧹</button>
+          
+          <div style="width: 1px; height: 16px; background: var(--border-color); margin: 0 2px;"></div>
+
+          <button class="icon-btn" id="btn-size-4" onclick="setDoodleSize(4)" title="小号 (4px)">•</button>
+          <button class="icon-btn active" id="btn-size-10" onclick="setDoodleSize(10)" title="中号 (10px)">●</button>
+          <button class="icon-btn" id="btn-size-20" onclick="setDoodleSize(20)" title="大号 (20px)">⬤</button>
+
+          <input type="color" id="doodle-color-picker" value="#00adb5" onchange="setDoodleColor(this.value)" style="height: 26px; width: 30px; cursor: pointer;">
+          
+          <button class="btn" style="padding: 2px 6px; font-size: 11px; margin-left: auto; height: 26px;" onclick="clearDoodleCanvas()">一键清除</button>
+        </div>
       </div>
+    </div>
 
-      <!-- 盲测进行中：包含正方形 HSB 盘 + 专属 H 色相条 -->
-      <div id="quiz-play-view" style="display: none; flex-direction: column; gap: 8px;">
-        <p style="font-size: 11px; opacity: 0.7; text-align: center;">在下方专属调色盘（色相条 + 正方形色盘）上选色：</p>
+    <!-- 可折叠抽屉 2：📊 图像 Lightroom 色阶分析 (Histogram) -->
+    <div class="accordion-item" id="accordion-histogram">
+      <div class="accordion-header" onclick="toggleAccordion('accordion-histogram')">
+        <span>📊 图像色阶直方图分析 (Histogram)</span>
+        <span class="acc-icon">▶</span>
+      </div>
+      <div class="accordion-body">
+        <canvas id="histogram-canvas" width="280" height="120" style="background:#111; border-radius:4px; border: 1px solid var(--border-color);"></canvas>
+        <div style="font-size: 10px; opacity: 0.6; text-align: center;">RGB 复合色彩通道分布</div>
+      </div>
+    </div>
 
-        <!-- 专属正方形 240x240 HSB 盘 -->
-        <div id="quiz-hsb-container">
-          <canvas id="quiz-hsb-canvas" width="240" height="240"></canvas>
-          <div id="quiz-picker-marker"></div>
+    <!-- 可折叠抽屉 3：🎯 动态抽屉式 Quiz 盲测 -->
+    <div class="accordion-item" id="accordion-quiz">
+      <div class="accordion-header" id="quiz-accordion-header" onclick="toggleQuizAccordion()">
+        <span>🎯 色彩记忆盲测 Challenge</span>
+        <span class="acc-icon" id="quiz-acc-icon">▶</span>
+      </div>
+      <div class="accordion-body">
+        <!-- 准备界面 -->
+        <div id="quiz-start-view">
+          <p style="font-size: 11px; opacity: 0.7; margin-bottom: 8px;">考考你的绝对色感：尝试在专属调色盘上调出目标的真实颜色！</p>
+          <button class="btn" style="width: 100%; font-weight: bold; background: var(--accent-color); color: #fff;" onclick="startQuiz()">开始盲测挑战</button>
         </div>
 
-        <!-- 专属 Quiz H 色相条 -->
-        <div id="quiz-hue-container">
-          <canvas id="quiz-hue-canvas" width="240" height="16"></canvas>
-          <div id="quiz-hue-marker"></div>
+        <!-- 盲测进行中：包含正方形 HSB 盘 (200x200) + 专属 H 色相条 -->
+        <div id="quiz-play-view" style="display: none; flex-direction: column; gap: 6px;">
+          <p style="font-size: 11px; opacity: 0.7; text-align: center;">在下方专属调色盘上操作：</p>
+
+          <div id="quiz-hsb-container">
+            <canvas id="quiz-hsb-canvas" width="200" height="200"></canvas>
+            <div id="quiz-picker-marker"></div>
+          </div>
+
+          <div id="quiz-hue-container">
+            <canvas id="quiz-hue-canvas" width="200" height="16"></canvas>
+            <div id="quiz-hue-marker"></div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+            <span style="font-size: 11px; opacity: 0.8;">预览:</span>
+            <div id="quiz-user-preview" style="flex: 1; height: 22px; border-radius: 4px; border: 1px solid var(--border-color);"></div>
+          </div>
+          <button class="btn" style="margin-top: 2px; width: 100%; font-weight: bold; background: var(--accent-color); color: #fff;" onclick="submitQuiz()">提交匹配打分</button>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 10px; margin-top: 2px;">
-          <span style="font-size: 11px; opacity: 0.8;">预览:</span>
-          <div id="quiz-user-preview" style="flex: 1; height: 22px; border-radius: 4px; border: 1px solid var(--border-color);"></div>
-        </div>
-        <button class="btn" style="margin-top: 2px;" onclick="submitQuiz()">提交匹配打分</button>
-      </div>
-
-      <!-- 结算界面 -->
-      <div id="quiz-result-view" style="display: none; flex-direction: column; gap: 8px; text-align: center;">
-        <div id="quiz-score-num" style="font-size: 28px; font-weight: bold; color: var(--active-color);">95 分</div>
-        <div id="quiz-score-detail" style="font-size: 11px; font-family: monospace; opacity: 0.8;"></div>
-        <div style="display: flex; gap: 8px;">
-          <button class="btn" style="flex: 1;" onclick="startQuiz()">再来一次</button>
-          <button class="btn" style="flex: 1;" onclick="stopQuiz()">结束测试</button>
+        <!-- 结算界面 -->
+        <div id="quiz-result-view" style="display: none; flex-direction: column; gap: 8px; text-align: center;">
+          <div id="quiz-score-num" style="font-size: 28px; font-weight: bold; color: var(--active-color);">95 分</div>
+          <div id="quiz-score-detail" style="font-size: 11px; font-family: monospace; opacity: 0.8;"></div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" style="flex: 1;" onclick="startQuiz()">再来一次</button>
+            <button class="btn" style="flex: 1;" onclick="stopQuiz()">结束测试</button>
+          </div>
         </div>
       </div>
     </div>
@@ -309,7 +422,7 @@
         <option value="default">自定义拖拽顺序</option>
         <option value="h">按色相 (H)</option>
         <option value="s">按饱和度 (S)</option>
-        <option value="l">按明度 (L)</option>
+        <option value="v">按明度/HSV (V)</option>
       </select>
     </div>
     <div class="color-list" id="color-list"></div>
@@ -331,6 +444,7 @@
   let colorData = [];
   let selectedIndex = -1;
   let img = null;
+  let currentImgId = null; // 标识当前载入的特定图像
 
   let scale = 1, panX = 0, panY = 0;
   let isPanning = false, startX = 0, startY = 0;
@@ -339,8 +453,12 @@
   // Quiz 盲测状态
   let isQuizActive = false;
   let quizTargetColor = null;
-  let quizUserH = 0, quizUserS = 100, quizUserV = 100; // HSB 模式玩家选择的 H/S/V
+  let quizUserH = 180, quizUserS = 100, quizUserV = 100;
   let isDraggingQuizHSB = false, isDraggingQuizHue = false;
+
+  // Doodle 绘图状态变量
+  let currentDoodleTool = 'brush';
+  let currentDoodleSize = 10;
 
   const container = document.getElementById('canvas-container');
   const imageCanvas = document.getElementById('image-canvas');
@@ -372,25 +490,65 @@
   initHueRings();
   renderHSBCanvas(0);
 
-  // 加载图片
+  // 折叠抽屉通用控制
+  function toggleAccordion(id) {
+    const item = document.getElementById(id);
+    const isOpen = item.classList.contains('open');
+    item.classList.toggle('open');
+    item.querySelector('.acc-icon').innerText = isOpen ? '▶' : '▼';
+  }
+
+  // Quiz 专属折叠控制
+  function toggleQuizAccordion() {
+    if (isQuizActive) return;
+    toggleAccordion('accordion-quiz');
+  }
+
+  // 通用图像载入渲染流程
+  function loadImageSource(src) {
+    img = new Image();
+    img.onload = () => {
+      // 生成新的图片 ID
+      currentImgId = Date.now();
+
+      imageCanvas.width = img.width;
+      imageCanvas.height = img.height;
+      const rect = container.getBoundingClientRect();
+      scale = Math.min(rect.width / img.width, rect.height / img.height) * 0.9;
+      panX = (rect.width - img.width * scale) / 2;
+      panY = (rect.height - img.height * scale) / 2;
+
+      // 仅取消当前点选状态，保留右侧及中间色盘的所有已有数据！
+      selectedIndex = -1;
+
+      redrawCanvas();
+      renderHistogram();
+      renderMarkers();
+    };
+    img.src = src;
+  }
+
+  // 1. 本地选择文件
   document.getElementById('file-input').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
-      img = new Image();
-      img.onload = () => {
-        imageCanvas.width = img.width;
-        imageCanvas.height = img.height;
-        const rect = container.getBoundingClientRect();
-        scale = Math.min(rect.width / img.width, rect.height / img.height) * 0.9;
-        panX = (rect.width - img.width * scale) / 2;
-        panY = (rect.height - img.height * scale) / 2;
-        redrawCanvas();
-      };
-      img.src = event.target.result;
-    };
+    reader.onload = (event) => loadImageSource(event.target.result);
     reader.readAsDataURL(file);
+  });
+
+  // 2. ⚡ 全页面 Ctrl+V 剪贴板粘贴
+  window.addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (let item of items) {
+      if (item.type.indexOf('image') !== -1) {
+        const file = item.getAsFile();
+        const reader = new FileReader();
+        reader.onload = (event) => loadImageSource(event.target.result);
+        reader.readAsDataURL(file);
+        break;
+      }
+    }
   });
 
   function updateCanvasTransform() {
@@ -402,17 +560,20 @@
     updateCanvasTransform();
     imgCtx.drawImage(img, 0, 0);
 
+    // 【核心变化】仅当取色点属于【当前这张图】时，才在左侧画布上绘制坐标圈
     colorData.forEach((item, index) => {
-      const isSelected = index === selectedIndex;
-      imgCtx.save();
-      imgCtx.beginPath();
-      imgCtx.arc(item.x, item.y, isSelected ? 8 / scale : 5 / scale, 0, Math.PI * 2);
-      imgCtx.fillStyle = `rgb(${item.r},${item.g},${item.b})`;
-      imgCtx.fill();
-      imgCtx.lineWidth = 2 / scale;
-      imgCtx.strokeStyle = isSelected ? '#00fff5' : '#ffffff';
-      imgCtx.stroke();
-      imgCtx.restore();
+      if (item.imageId === currentImgId) {
+        const isSelected = index === selectedIndex;
+        imgCtx.save();
+        imgCtx.beginPath();
+        imgCtx.arc(item.x, item.y, isSelected ? 8 / scale : 5 / scale, 0, Math.PI * 2);
+        imgCtx.fillStyle = `rgb(${item.r},${item.g},${item.b})`;
+        imgCtx.fill();
+        imgCtx.lineWidth = 2 / scale;
+        imgCtx.strokeStyle = isSelected ? '#00fff5' : '#ffffff';
+        imgCtx.stroke();
+        imgCtx.restore();
+      }
     });
   }
 
@@ -460,14 +621,16 @@
 
     const size = parseInt(document.getElementById('sample-size').value);
     const rgb = getAverageRGB(x, y, size);
-    const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
     const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+    const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
 
-    const item = { id: Date.now(), x, y, r: rgb.r, g: rgb.g, b: rgb.b, h: hsl.h, s: hsl.s, l: hsl.l, hsvS: hsv.s, hsvV: hsv.v };
+    const item = { id: Date.now(), imageId: currentImgId, x, y, r: rgb.r, g: rgb.g, b: rgb.b, h: hsv.h, s: hsv.s, v: hsv.v, hex };
     colorData.push(item);
     
     selectedIndex = colorData.length - 1;
     document.getElementById('sort-type').value = 'default';
+    
+    setDoodleColor(hex);
     updateUI();
   });
 
@@ -480,9 +643,10 @@
     if (x >= 0 && x < img.width && y >= 0 && y < img.height) {
       const size = parseInt(document.getElementById('sample-size').value);
       const rgb = getAverageRGB(x, y, size);
-      const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+      const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+      const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
       document.getElementById('hover-color-val').innerText = 
-        `RGB: (${rgb.r},${rgb.g},${rgb.b}) | HSL: (${hsl.h}°, ${hsl.s}%, ${hsl.l}%)`;
+        `RGB: (${rgb.r},${rgb.g},${rgb.b}) | HSV: (${hsv.h}°, ${hsv.s}%, ${hsv.v}%) | HEX: ${hex}`;
     }
   });
 
@@ -499,7 +663,7 @@
     return { r: Math.round(r / count), g: Math.round(g / count), b: Math.round(b / count) };
   }
 
-  // 渲染主分析区域的 PS / HSB 二维色盘
+  // 渲染 PS / HSB 二维色盘
   function renderHSBCanvas(hue) {
     const width = hsbCanvas.width;
     const height = hsbCanvas.height;
@@ -521,7 +685,6 @@
     hsbCtx.putImageData(imgData, 0, 0);
   }
 
-  // 渲染 Quiz 盲测区专属的 240x240 二维色盘
   function renderQuizHSBCanvas(hue) {
     const width = quizHsbCanvas.width;
     const height = quizHsbCanvas.height;
@@ -561,11 +724,12 @@
     const currentHue = selectedIndex >= 0 && colorData[selectedIndex] ? colorData[selectedIndex].h : 0;
     renderHSBCanvas(currentHue);
 
+    // 【核心保持】在中间 HSB 色盘和底部 H 色环上，绘制【所有已存色彩】的点位标记（不受换图影响）
     colorData.forEach((item, index) => {
       const marker = document.createElement('div');
       marker.className = `color-marker ${index === selectedIndex ? 'selected' : ''}`;
-      marker.style.left = `${item.hsvS}%`;
-      marker.style.top = `${100 - item.hsvV}%`;
+      marker.style.left = `${item.s}%`;
+      marker.style.top = `${100 - item.v}%`;
       marker.style.backgroundColor = `rgb(${item.r},${item.g},${item.b})`;
       marker.onclick = (e) => { e.stopPropagation(); selectItem(index); };
       marker.onmouseenter = () => highlightItem(index, true);
@@ -597,14 +761,18 @@
         <span class="drag-handle">⋮⋮</span>
         <div class="color-preview" style="background: rgb(${item.r},${item.g},${item.b})"></div>
         <div class="color-info ${maskClass}">
-          <div>HSL: ${item.h}°, ${item.s}%, ${item.l}%</div>
-          <div style="opacity: 0.6;">RGB: ${item.r}, ${item.g}, ${item.b}</div>
+          <div>HSV: ${item.h}°, ${item.s}%, ${item.v}%</div>
+          <div style="opacity: 0.7; font-weight: bold;">${item.hex}</div>
         </div>
+        <div class="copy-btn" onclick="copyHex(event, '${item.hex}')" title="复制HEX代码">📋</div>
         <div class="delete-btn" onclick="deleteItem(event, ${index})">✕</div>
       `;
 
       if (!isQuizActive) {
-        el.onclick = () => selectItem(index);
+        el.onclick = () => {
+          selectItem(index);
+          setDoodleColor(item.hex);
+        };
         el.onmouseenter = (e) => showTooltip(e, item, index);
         el.onmouseleave = () => hideTooltip(index);
 
@@ -649,6 +817,13 @@
     updateUI();
   }
 
+  function copyHex(e, hex) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(hex).then(() => {
+      alert(`已复制颜色代码: ${hex}`);
+    });
+  }
+
   function highlightItem(index, isHover) {
     const listItems = document.querySelectorAll('.color-item');
     if (listItems[index]) {
@@ -657,6 +832,7 @@
     }
   }
 
+  // 悬停 Tooltip 浮窗
   const tooltip = document.getElementById('hover-tooltip');
   const tooltipCanvas = document.getElementById('tooltip-hsb-canvas');
   const tooltipCtx = tooltipCanvas.getContext('2d');
@@ -674,7 +850,13 @@
 
     tooltip.style.top = `${top}px`;
     tooltip.style.left = `${left}px`;
-    document.getElementById('tooltip-pos').innerText = `原图坐标 (X: ${item.x}, Y: ${item.y})`;
+    
+    // 原图存在坐标时提示精确坐标，否者提示为历史色彩
+    if (item.imageId === currentImgId) {
+      document.getElementById('tooltip-pos').innerText = `原图坐标 (X: ${item.x}, Y: ${item.y})`;
+    } else {
+      document.getElementById('tooltip-pos').innerText = `已存历史色彩`;
+    }
 
     const width = tooltipCanvas.width, height = tooltipCanvas.height;
     const imgData = tooltipCtx.createImageData(width, height);
@@ -692,7 +874,7 @@
 
     tooltipCtx.strokeStyle = '#fff';
     tooltipCtx.beginPath();
-    tooltipCtx.arc((item.hsvS / 100) * width, (1 - item.hsvV / 100) * height, 4, 0, Math.PI * 2);
+    tooltipCtx.arc((item.s / 100) * width, (1 - item.v / 100) * height, 4, 0, Math.PI * 2);
     tooltipCtx.stroke();
   }
 
@@ -717,9 +899,9 @@
       content = JSON.stringify(colorData, null, 2);
       mime = 'application/json';
     } else if (type === 'css') {
-      content = ':root {\n' + colorData.map((c, i) => `  --color-${i + 1}: hsl(${c.h}, ${c.s}%, ${c.l}%); /* RGB: ${c.r},${c.g},${c.b} */`).join('\n') + '\n}';
+      content = ':root {\n' + colorData.map((c, i) => `  --color-${i + 1}: ${c.hex}; /* HSV: ${c.h}°,${c.s}%,${c.v}% */`).join('\n') + '\n}';
     } else if (type === 'csv') {
-      content = 'Index,X,Y,R,G,B,H,S,L\n' + colorData.map((c, i) => `${i+1},${c.x},${c.y},${c.r},${c.g},${c.b},${c.h},${c.s},${c.l}`).join('\n');
+      content = 'Index,X,Y,R,G,B,H,S,V,HEX\n' + colorData.map((c, i) => `${i+1},${c.x},${c.y},${c.r},${c.g},${c.b},${c.h},${c.s},${c.v},${c.hex}`).join('\n');
       mime = 'text/csv';
     }
 
@@ -731,7 +913,116 @@
   }
 
   /* -----------------------------------------------------------
-   * 🎯 盲测专属 Quiz 正方形色盘与 H 色相条鼠标交互逻辑
+   * 🎨 组合试色草稿板 (Doodle Sandbox Canvas)
+   * ----------------------------------------------------------- */
+  const doodleCanvas = document.getElementById('doodle-canvas');
+  const doodleCtx = doodleCanvas.getContext('2d');
+  let isDrawing = false;
+
+  function clearDoodleCanvas() {
+    doodleCtx.fillStyle = '#ffffff';
+    doodleCtx.fillRect(0, 0, doodleCanvas.width, doodleCanvas.height);
+  }
+  clearDoodleCanvas();
+
+  function setDoodleTool(tool) {
+    currentDoodleTool = tool;
+    document.getElementById('btn-tool-brush').classList.toggle('active', tool === 'brush');
+    document.getElementById('btn-tool-eraser').classList.toggle('active', tool === 'eraser');
+    updateDoodleBrush();
+  }
+
+  function setDoodleSize(size) {
+    currentDoodleSize = size;
+    document.getElementById('btn-size-4').classList.toggle('active', size === 4);
+    document.getElementById('btn-size-10').classList.toggle('active', size === 10);
+    document.getElementById('btn-size-20').classList.toggle('active', size === 20);
+    updateDoodleBrush();
+  }
+
+  function updateDoodleBrush() {
+    const color = document.getElementById('doodle-color-picker').value;
+    doodleCtx.lineWidth = currentDoodleSize;
+    doodleCtx.lineCap = 'round';
+    doodleCtx.lineJoin = 'round';
+
+    if (currentDoodleTool === 'eraser') {
+      doodleCtx.strokeStyle = '#ffffff';
+    } else {
+      doodleCtx.strokeStyle = color;
+    }
+  }
+
+  function setDoodleColor(hex) {
+    document.getElementById('doodle-color-picker').value = hex;
+    setDoodleTool('brush');
+  }
+
+  doodleCanvas.addEventListener('mousedown', (e) => {
+    isDrawing = true;
+    updateDoodleBrush();
+    const rect = doodleCanvas.getBoundingClientRect();
+    doodleCtx.beginPath();
+    doodleCtx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+  });
+
+  doodleCanvas.addEventListener('mousemove', (e) => {
+    if (!isDrawing) return;
+    const rect = doodleCanvas.getBoundingClientRect();
+    doodleCtx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    doodleCtx.stroke();
+  });
+
+  window.addEventListener('mouseup', () => { isDrawing = false; });
+
+  /* -----------------------------------------------------------
+   * 📊 Lightroom 风格直方图 (Histogram)
+   * ----------------------------------------------------------- */
+  function renderHistogram() {
+    if (!img) return;
+    const histCanvas = document.getElementById('histogram-canvas');
+    const histCtx = histCanvas.getContext('2d');
+    const width = histCanvas.width;
+    const height = histCanvas.height;
+
+    histCtx.clearRect(0, 0, width, height);
+
+    const imgData = imgCtx.getImageData(0, 0, imageCanvas.width, imageCanvas.height).data;
+    const rHist = new Array(256).fill(0);
+    const gHist = new Array(256).fill(0);
+    const bHist = new Array(256).fill(0);
+
+    for (let i = 0; i < imgData.length; i += 4) {
+      rHist[imgData[i]]++;
+      gHist[imgData[i+1]]++;
+      bHist[imgData[i+2]]++;
+    }
+
+    const maxVal = Math.max(...rHist, ...gHist, ...bHist);
+
+    function drawChannel(hist, color) {
+      histCtx.fillStyle = color;
+      histCtx.beginPath();
+      histCtx.moveTo(0, height);
+      for (let i = 0; i < 256; i++) {
+        const x = (i / 255) * width;
+        const y = height - (hist[i] / maxVal) * height;
+        histCtx.lineTo(x, y);
+      }
+      histCtx.lineTo(width, height);
+      histCtx.closePath();
+      histCtx.fill();
+    }
+
+    histCtx.globalCompositeOperation = 'screen';
+    drawChannel(rHist, 'rgba(255, 0, 0, 0.5)');
+    drawChannel(gHist, 'rgba(0, 255, 0, 0.5)');
+    drawChannel(bHist, 'rgba(0, 0, 255, 0.5)');
+    histCtx.globalCompositeOperation = 'source-over';
+  }
+
+  /* -----------------------------------------------------------
+   * 🎯 盲测专属 Quiz 点选逻辑
    * ----------------------------------------------------------- */
   const quizHsbContainer = document.getElementById('quiz-hsb-container');
   const quizHueContainer = document.getElementById('quiz-hue-container');
@@ -757,16 +1048,14 @@
     isDraggingQuizHue = false;
   });
 
-  // 拖动 Quiz 专属 H 色相条
   function updateQuizHueFromMouse(e) {
     const rect = quizHueContainer.getBoundingClientRect();
     let x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
     quizUserH = Math.round((x / rect.width) * 360);
-    renderQuizHSBCanvas(quizUserH); // 色相改变时重绘专属正方形 S-V 底图
+    renderQuizHSBCanvas(quizUserH);
     updateQuizUI();
   }
 
-  // 拖动 Quiz 专属 S-V 正方形色盘
   function updateQuizHSBFromMouse(e) {
     const rect = quizHsbContainer.getBoundingClientRect();
     let x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
@@ -778,18 +1067,15 @@
   }
 
   function updateQuizUI() {
-    // 1. 更新 S-V 色盘上的圆形 Indicator 位置
     const pickerMarker = document.getElementById('quiz-picker-marker');
     pickerMarker.style.left = `${quizUserS}%`;
     pickerMarker.style.top = `${100 - quizUserV}%`;
     const userRgb = hsvToRgb(quizUserH, quizUserS / 100, quizUserV / 100);
     pickerMarker.style.backgroundColor = `rgb(${userRgb.r}, ${userRgb.g}, ${userRgb.b})`;
 
-    // 2. 更新 H 色相条上的 Marker 位置
     const hueMarker = document.getElementById('quiz-hue-marker');
     hueMarker.style.left = `${(quizUserH / 360) * 100}%`;
 
-    // 3. 更新预览色块
     document.getElementById('quiz-user-preview').style.backgroundColor = `rgb(${userRgb.r}, ${userRgb.g}, ${userRgb.b})`;
   }
 
@@ -803,16 +1089,23 @@
     const randIdx = Math.floor(Math.random() * colorData.length);
     quizTargetColor = colorData[randIdx];
 
-    // 初始化玩家盲测起点参数
     quizUserH = 180; quizUserS = 50; quizUserV = 50;
 
-    // 遮挡主界面原本的分析色盘和标记
+    // 1. 强制展开 Quiz 抽屉，关闭展开图标交互
+    const quizItem = document.getElementById('accordion-quiz');
+    quizItem.classList.add('open');
+    document.getElementById('quiz-acc-icon').innerText = '▼';
+
+    // 2. 遮挡主分析区，隐藏试色板与直方图
     document.getElementById('sl-markers-layer').style.display = 'none';
     document.getElementById('hue-markers-layer').style.display = 'none';
-    
+    document.getElementById('accordion-doodle').style.display = 'none';
+    document.getElementById('accordion-histogram').style.display = 'none';
+
     const mask = document.getElementById('quiz-target-mask');
     mask.style.display = 'flex';
-    mask.style.backgroundColor = `hsl(${quizTargetColor.h}, ${quizTargetColor.s}%, ${quizTargetColor.l}%)`;
+    const targetRgb = hsvToRgb(quizTargetColor.h, quizTargetColor.s / 100, quizTargetColor.v / 100);
+    mask.style.backgroundColor = `rgb(${targetRgb.r}, ${targetRgb.g}, ${targetRgb.b})`;
 
     document.getElementById('quiz-start-view').style.display = 'none';
     document.getElementById('quiz-result-view').style.display = 'none';
@@ -820,21 +1113,17 @@
 
     renderQuizHSBCanvas(quizUserH);
     updateQuizUI();
-    renderList(); // 模糊右侧数值
+    renderList();
   }
 
   function submitQuiz() {
-    // 将玩家在 Quiz 中调出的 HSV 换算回 HSL 进行评分
-    const userRgb = hsvToRgb(quizUserH, quizUserS / 100, quizUserV / 100);
-    const userHsl = rgbToHsl(userRgb.r, userRgb.g, userRgb.b);
-
-    let diffH = Math.abs(userHsl.h - quizTargetColor.h);
+    let diffH = Math.abs(quizUserH - quizTargetColor.h);
     if (diffH > 180) diffH = 360 - diffH;
 
-    const diffS = Math.abs(userHsl.s - quizTargetColor.s);
-    const diffL = Math.abs(userHsl.l - quizTargetColor.l);
+    const diffS = Math.abs(quizUserS - quizTargetColor.s);
+    const diffV = Math.abs(quizUserV - quizTargetColor.v);
 
-    const totalDiff = diffH + diffS + diffL;
+    const totalDiff = diffH + diffS + diffV;
     const score = Math.max(0, 100 - totalDiff);
 
     document.getElementById('quiz-target-mask').style.display = 'none';
@@ -843,8 +1132,8 @@
 
     document.getElementById('quiz-score-num').innerText = `${score} 分`;
     document.getElementById('quiz-score-detail').innerHTML = `
-      目标真实值: H:${quizTargetColor.h}° S:${quizTargetColor.s}% L:${quizTargetColor.l}%<br>
-      你的猜测值: H:${userHsl.h}° S:${userHsl.s}% L:${userHsl.l}%<br>
+      目标真实值: HSV: ${quizTargetColor.h}°, ${quizTargetColor.s}%, ${quizTargetColor.v}% (${quizTargetColor.hex})<br>
+      你的猜测值: HSV: ${quizUserH}°, ${quizUserS}%, ${quizUserV}%<br>
       (总误差: ${totalDiff})
     `;
 
@@ -860,33 +1149,24 @@
     document.getElementById('sl-markers-layer').style.display = 'block';
     document.getElementById('hue-markers-layer').style.display = 'block';
     document.getElementById('quiz-target-mask').style.display = 'none';
+    
+    document.getElementById('accordion-doodle').style.display = 'block';
+    document.getElementById('accordion-histogram').style.display = 'block';
 
     document.getElementById('quiz-start-view').style.display = 'block';
     document.getElementById('quiz-play-view').style.display = 'none';
     document.getElementById('quiz-result-view').style.display = 'none';
 
+    // 还原 Quiz 抽屉手风琴状态
+    document.getElementById('quiz-acc-icon').innerText = '▶';
+    document.getElementById('accordion-quiz').classList.remove('open');
+
     updateUI();
   }
 
-  // 色彩转换公用函数 (RGB <-> HSL <-> HSV/HSB)
-  function rgbToHsl(r, g, b) {
-    r /= 255; g /= 255; b /= 255;
-    const max = Math.max(r, g, b), min = Math.min(r, g, b);
-    let h, s, l = (max + min) / 2;
-
-    if (max === min) {
-      h = s = 0;
-    } else {
-      const d = max - min;
-      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-      switch (max) {
-        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-        case g: h = (b - r) / d + 2; break;
-        case b: h = (r - g) / d + 4; break;
-      }
-      h /= 6;
-    }
-    return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+  // 色彩转换公用函数
+  function rgbToHex(r, g, b) {
+    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
   }
 
   function rgbToHsv(r, g, b) {
