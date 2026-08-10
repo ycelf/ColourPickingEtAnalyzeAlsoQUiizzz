@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>本地色彩拆解与分析工具</title>
-<link rel="icon" type="image/png" href="my_icon.png">
+  <title>本地色彩拆解与分析工具 (PS/HSB 坐标系完整版)</title>
+<link rel="icon" type="image/png" href="my_icon.png?v=2">
   <style>
     :root {
       --bg-color: #1a1a1a;
@@ -85,7 +85,7 @@
     }
     #image-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
 
-    /* 中间面板 */
+    /* 中间：PS风格 HSB/HSV 2D色盘 */
     #center-pane { 
       width: 340px; 
       border-right: 1px solid var(--border-color); 
@@ -99,10 +99,9 @@
     }
     .panel-title { font-size: 13px; font-weight: bold; opacity: 0.8; margin-bottom: 4px; }
     
-    #sl-picker-container { position: relative; width: 300px; height: 300px; margin: 0 auto; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; }
-    #sl-canvas { width: 100%; height: 100%; display: block; }
+    #hsb-picker-container { position: relative; width: 300px; height: 300px; margin: 0 auto; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; }
+    #hsb-canvas { width: 100%; height: 100%; display: block; }
     
-    /* Quiz 参照目标色遮罩 */
     #quiz-target-mask {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       display: none; justify-content: center; align-items: center;
@@ -125,10 +124,10 @@
       gap: 8px;
     }
 
-    #quiz-sl-container { position: relative; width: 260px; height: 160px; margin: 0 auto; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; cursor: crosshair; }
-    #quiz-sl-canvas { width: 100%; height: 100%; display: block; }
-    
-    #quiz-hue-container { position: relative; width: 260px; height: 16px; margin: 0 auto; cursor: pointer; }
+    #quiz-hsb-container { position: relative; width: 240px; height: 240px; margin: 0 auto; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; cursor: crosshair; }
+    #quiz-hsb-canvas { width: 100%; height: 100%; display: block; }
+
+    #quiz-hue-container { position: relative; width: 240px; height: 16px; margin: 0 auto; cursor: pointer; }
     #quiz-hue-canvas { width: 100%; height: 100%; border-radius: 8px; display: block; }
 
     #quiz-picker-marker {
@@ -230,21 +229,21 @@
       <canvas id="image-canvas"></canvas>
     </div>
     <div style="padding: 6px 12px; font-size: 11px; opacity: 0.6; font-family: monospace; background: var(--panel-bg); border-top: 1px solid var(--border-color);">
-      操作提示：滚轮缩放 | 鼠标中键拖拽 | 左键取色（取色将自动打断盲测小游戏）
+      操作提示：滚轮缩放 | 鼠标中键拖拽 | 左键取色（取色自动退出盲测模式）
     </div>
   </div>
 
-  <!-- 中间：主色盘 + 盲测挑战 -->
+  <!-- 中间：PS风格 HSB 色盘 + 盲测挑战 -->
   <div id="center-pane">
-    <div class="panel-title" id="sl-title">S-L 色度分布盘 (饱和度-明度)</div>
-    <div id="sl-picker-container">
-      <canvas id="sl-canvas" width="300" height="300"></canvas>
+    <div class="panel-title" id="sl-title">PS 风格色盘 (原图色彩分析)</div>
+    <div id="hsb-picker-container">
+      <canvas id="hsb-canvas" width="300" height="300"></canvas>
       <div id="sl-markers-layer"></div>
       <div id="quiz-target-mask">🎯 参照目标色 (凭记忆复刻)</div>
     </div>
 
     <div id="hue-ring-wrapper">
-      <div class="panel-title" style="margin-top: 5px;">H 色相环分布</div>
+      <div class="panel-title" style="margin-top: 5px;">H 色相分布 (原图点标记)</div>
       <div id="hue-ring-container">
         <canvas id="hue-canvas" width="300" height="20"></canvas>
         <div id="hue-markers-layer"></div>
@@ -259,23 +258,23 @@
       
       <!-- 准备界面 -->
       <div id="quiz-start-view">
-        <p style="font-size: 11px; opacity: 0.7; margin-bottom: 8px;">考考你的绝对色感：尝试在专属调色盘上调出上方目标颜色的真实 HSL 值！</p>
+        <p style="font-size: 11px; opacity: 0.7; margin-bottom: 8px;">考考你的绝对色感：尝试在专属调色盘上调出目标的真实颜色！</p>
         <button class="btn" style="width: 100%;" onclick="startQuiz()">开始盲测挑战</button>
       </div>
 
-      <!-- 盲测进行中：专属独立调色盘 -->
+      <!-- 盲测进行中：包含正方形 HSB 盘 + 专属 H 色相条 -->
       <div id="quiz-play-view" style="display: none; flex-direction: column; gap: 8px;">
-        <p style="font-size: 11px; opacity: 0.7; text-align: center;">在下方专属调色盘上操作：</p>
+        <p style="font-size: 11px; opacity: 0.7; text-align: center;">在下方专属调色盘（色相条 + 正方形色盘）上选色：</p>
 
-        <!-- 专属 S-L 盘 -->
-        <div id="quiz-sl-container">
-          <canvas id="quiz-sl-canvas" width="260" height="160"></canvas>
+        <!-- 专属正方形 240x240 HSB 盘 -->
+        <div id="quiz-hsb-container">
+          <canvas id="quiz-hsb-canvas" width="240" height="240"></canvas>
           <div id="quiz-picker-marker"></div>
         </div>
 
-        <!-- 专属 H 色环 -->
+        <!-- 专属 Quiz H 色相条 -->
         <div id="quiz-hue-container">
-          <canvas id="quiz-hue-canvas" width="260" height="16"></canvas>
+          <canvas id="quiz-hue-canvas" width="240" height="16"></canvas>
           <div id="quiz-hue-marker"></div>
         </div>
 
@@ -324,7 +323,7 @@
 
 <!-- 悬停 Preview 浮窗 -->
 <div id="hover-tooltip">
-  <canvas id="tooltip-sl-canvas" width="144" height="144"></canvas>
+  <canvas id="tooltip-hsb-canvas" width="144" height="144"></canvas>
   <div class="pos-info" id="tooltip-pos">X: 0, Y: 0</div>
 </div>
 
@@ -340,20 +339,20 @@
   // Quiz 盲测状态
   let isQuizActive = false;
   let quizTargetColor = null;
-  let quizUserH = 180, quizUserS = 50, quizUserL = 50;
-  let isDraggingQuizSL = false, isDraggingQuizHue = false;
+  let quizUserH = 0, quizUserS = 100, quizUserV = 100; // HSB 模式玩家选择的 H/S/V
+  let isDraggingQuizHSB = false, isDraggingQuizHue = false;
 
   const container = document.getElementById('canvas-container');
   const imageCanvas = document.getElementById('image-canvas');
   const imgCtx = imageCanvas.getContext('2d');
   
-  const slCanvas = document.getElementById('sl-canvas');
-  const slCtx = slCanvas.getContext('2d');
+  const hsbCanvas = document.getElementById('hsb-canvas');
+  const hsbCtx = hsbCanvas.getContext('2d');
   const hueCanvas = document.getElementById('hue-canvas');
   const hueCtx = hueCanvas.getContext('2d');
 
-  const quizSlCanvas = document.getElementById('quiz-sl-canvas');
-  const quizSlCtx = quizSlCanvas.getContext('2d');
+  const quizHsbCanvas = document.getElementById('quiz-hsb-canvas');
+  const quizHsbCtx = quizHsbCanvas.getContext('2d');
   const quizHueCanvas = document.getElementById('quiz-hue-canvas');
   const quizHueCtx = quizHueCanvas.getContext('2d');
 
@@ -371,7 +370,7 @@
     quizHueCtx.fillRect(0, 0, quizHueCanvas.width, quizHueCanvas.height);
   }
   initHueRings();
-  renderSLCanvas(0);
+  renderHSBCanvas(0);
 
   // 加载图片
   document.getElementById('file-input').addEventListener('change', (e) => {
@@ -448,7 +447,7 @@
 
   window.addEventListener('mouseup', (e) => { if (e.button === 1) isPanning = false; });
 
-  // 原图取色（可打断 Quiz）
+  // 原图取色（退出 Quiz）
   container.addEventListener('click', (e) => {
     if (!img || e.button !== 0) return;
     if (isQuizActive) stopQuiz();
@@ -462,8 +461,9 @@
     const size = parseInt(document.getElementById('sample-size').value);
     const rgb = getAverageRGB(x, y, size);
     const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+    const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
 
-    const item = { id: Date.now(), x, y, r: rgb.r, g: rgb.g, b: rgb.b, h: hsl.h, s: hsl.s, l: hsl.l };
+    const item = { id: Date.now(), x, y, r: rgb.r, g: rgb.g, b: rgb.b, h: hsl.h, s: hsl.s, l: hsl.l, hsvS: hsv.s, hsvV: hsv.v };
     colorData.push(item);
     
     selectedIndex = colorData.length - 1;
@@ -499,17 +499,18 @@
     return { r: Math.round(r / count), g: Math.round(g / count), b: Math.round(b / count) };
   }
 
-  function renderSLCanvas(hue) {
-    const width = slCanvas.width;
-    const height = slCanvas.height;
-    const imgData = slCtx.createImageData(width, height);
+  // 渲染主分析区域的 PS / HSB 二维色盘
+  function renderHSBCanvas(hue) {
+    const width = hsbCanvas.width;
+    const height = hsbCanvas.height;
+    const imgData = hsbCtx.createImageData(width, height);
     let idx = 0;
 
     for (let y = 0; y < height; y++) {
-      const l = 1 - (y / height);
+      const v = 1 - (y / height);
       for (let x = 0; x < width; x++) {
         const s = x / width;
-        const rgb = hslToRgb(hue, s, l);
+        const rgb = hsvToRgb(hue, s, v);
         imgData.data[idx] = rgb.r;
         imgData.data[idx+1] = rgb.g;
         imgData.data[idx+2] = rgb.b;
@@ -517,20 +518,21 @@
         idx += 4;
       }
     }
-    slCtx.putImageData(imgData, 0, 0);
+    hsbCtx.putImageData(imgData, 0, 0);
   }
 
-  function renderQuizSLCanvas(hue) {
-    const width = quizSlCanvas.width;
-    const height = quizSlCanvas.height;
-    const imgData = quizSlCtx.createImageData(width, height);
+  // 渲染 Quiz 盲测区专属的 240x240 二维色盘
+  function renderQuizHSBCanvas(hue) {
+    const width = quizHsbCanvas.width;
+    const height = quizHsbCanvas.height;
+    const imgData = quizHsbCtx.createImageData(width, height);
     let idx = 0;
 
     for (let y = 0; y < height; y++) {
-      const l = 1 - (y / height);
+      const v = 1 - (y / height);
       for (let x = 0; x < width; x++) {
         const s = x / width;
-        const rgb = hslToRgb(hue, s, l);
+        const rgb = hsvToRgb(hue, s, v);
         imgData.data[idx] = rgb.r;
         imgData.data[idx+1] = rgb.g;
         imgData.data[idx+2] = rgb.b;
@@ -538,7 +540,7 @@
         idx += 4;
       }
     }
-    quizSlCtx.putImageData(imgData, 0, 0);
+    quizHsbCtx.putImageData(imgData, 0, 0);
   }
 
   function updateUI() {
@@ -557,13 +559,13 @@
     if (isQuizActive) return;
 
     const currentHue = selectedIndex >= 0 && colorData[selectedIndex] ? colorData[selectedIndex].h : 0;
-    renderSLCanvas(currentHue);
+    renderHSBCanvas(currentHue);
 
     colorData.forEach((item, index) => {
       const marker = document.createElement('div');
       marker.className = `color-marker ${index === selectedIndex ? 'selected' : ''}`;
-      marker.style.left = `${item.s}%`;
-      marker.style.top = `${100 - item.l}%`;
+      marker.style.left = `${item.hsvS}%`;
+      marker.style.top = `${100 - item.hsvV}%`;
       marker.style.backgroundColor = `rgb(${item.r},${item.g},${item.b})`;
       marker.onclick = (e) => { e.stopPropagation(); selectItem(index); };
       marker.onmouseenter = () => highlightItem(index, true);
@@ -656,7 +658,7 @@
   }
 
   const tooltip = document.getElementById('hover-tooltip');
-  const tooltipCanvas = document.getElementById('tooltip-sl-canvas');
+  const tooltipCanvas = document.getElementById('tooltip-hsb-canvas');
   const tooltipCtx = tooltipCanvas.getContext('2d');
 
   function showTooltip(e, item, index) {
@@ -678,9 +680,10 @@
     const imgData = tooltipCtx.createImageData(width, height);
     let idx = 0;
     for (let y = 0; y < height; y++) {
-      const l = 1 - (y / height);
+      const v = 1 - (y / height);
       for (let x = 0; x < width; x++) {
-        const rgb = hslToRgb(item.h, x / width, l);
+        const s = x / width;
+        const rgb = hsvToRgb(item.h, s, v);
         imgData.data[idx] = rgb.r; imgData.data[idx+1] = rgb.g; imgData.data[idx+2] = rgb.b; imgData.data[idx+3] = 255;
         idx += 4;
       }
@@ -689,7 +692,7 @@
 
     tooltipCtx.strokeStyle = '#fff';
     tooltipCtx.beginPath();
-    tooltipCtx.arc((item.s / 100) * width, (1 - item.l / 100) * height, 4, 0, Math.PI * 2);
+    tooltipCtx.arc((item.hsvS / 100) * width, (1 - item.hsvV / 100) * height, 4, 0, Math.PI * 2);
     tooltipCtx.stroke();
   }
 
@@ -728,14 +731,14 @@
   }
 
   /* -----------------------------------------------------------
-   * 🎯 盲测专属新色盘点选逻辑
+   * 🎯 盲测专属 Quiz 正方形色盘与 H 色相条鼠标交互逻辑
    * ----------------------------------------------------------- */
-  const quizSlContainer = document.getElementById('quiz-sl-container');
+  const quizHsbContainer = document.getElementById('quiz-hsb-container');
   const quizHueContainer = document.getElementById('quiz-hue-container');
 
-  quizSlContainer.addEventListener('mousedown', (e) => {
-    isDraggingQuizSL = true;
-    updateQuizSLFromMouse(e);
+  quizHsbContainer.addEventListener('mousedown', (e) => {
+    isDraggingQuizHSB = true;
+    updateQuizHSBFromMouse(e);
   });
 
   quizHueContainer.addEventListener('mousedown', (e) => {
@@ -745,43 +748,49 @@
 
   window.addEventListener('mousemove', (e) => {
     if (!isQuizActive) return;
-    if (isDraggingQuizSL) updateQuizSLFromMouse(e);
+    if (isDraggingQuizHSB) updateQuizHSBFromMouse(e);
     if (isDraggingQuizHue) updateQuizHueFromMouse(e);
   });
 
   window.addEventListener('mouseup', () => {
-    isDraggingQuizSL = false;
+    isDraggingQuizHSB = false;
     isDraggingQuizHue = false;
   });
 
+  // 拖动 Quiz 专属 H 色相条
   function updateQuizHueFromMouse(e) {
     const rect = quizHueContainer.getBoundingClientRect();
     let x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
     quizUserH = Math.round((x / rect.width) * 360);
-    renderQuizSLCanvas(quizUserH);
+    renderQuizHSBCanvas(quizUserH); // 色相改变时重绘专属正方形 S-V 底图
     updateQuizUI();
   }
 
-  function updateQuizSLFromMouse(e) {
-    const rect = quizSlContainer.getBoundingClientRect();
+  // 拖动 Quiz 专属 S-V 正方形色盘
+  function updateQuizHSBFromMouse(e) {
+    const rect = quizHsbContainer.getBoundingClientRect();
     let x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
     let y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
 
     quizUserS = Math.round((x / rect.width) * 100);
-    quizUserL = Math.round((1 - y / rect.height) * 100);
+    quizUserV = Math.round((1 - y / rect.height) * 100);
     updateQuizUI();
   }
 
   function updateQuizUI() {
+    // 1. 更新 S-V 色盘上的圆形 Indicator 位置
     const pickerMarker = document.getElementById('quiz-picker-marker');
     pickerMarker.style.left = `${quizUserS}%`;
-    pickerMarker.style.top = `${100 - quizUserL}%`;
-    pickerMarker.style.backgroundColor = `hsl(${quizUserH}, ${quizUserS}%, ${quizUserL}%)`;
+    pickerMarker.style.top = `${100 - quizUserV}%`;
+    const userRgb = hsvToRgb(quizUserH, quizUserS / 100, quizUserV / 100);
+    pickerMarker.style.backgroundColor = `rgb(${userRgb.r}, ${userRgb.g}, ${userRgb.b})`;
 
+    // 2. 更新 H 色相条上的 Marker 位置
     const hueMarker = document.getElementById('quiz-hue-marker');
     hueMarker.style.left = `${(quizUserH / 360) * 100}%`;
 
-    document.getElementById('quiz-user-preview').style.backgroundColor = `hsl(${quizUserH}, ${quizUserS}%, ${quizUserL}%)`;
+    // 3. 更新预览色块
+    document.getElementById('quiz-user-preview').style.backgroundColor = `rgb(${userRgb.r}, ${userRgb.g}, ${userRgb.b})`;
   }
 
   function startQuiz() {
@@ -794,9 +803,10 @@
     const randIdx = Math.floor(Math.random() * colorData.length);
     quizTargetColor = colorData[randIdx];
 
-    quizUserH = 180; quizUserS = 50; quizUserL = 50;
+    // 初始化玩家盲测起点参数
+    quizUserH = 180; quizUserS = 50; quizUserV = 50;
 
-    // 主色盘隐藏 Marker，遮罩目标色
+    // 遮挡主界面原本的分析色盘和标记
     document.getElementById('sl-markers-layer').style.display = 'none';
     document.getElementById('hue-markers-layer').style.display = 'none';
     
@@ -808,17 +818,21 @@
     document.getElementById('quiz-result-view').style.display = 'none';
     document.getElementById('quiz-play-view').style.display = 'flex';
 
-    renderQuizSLCanvas(quizUserH);
+    renderQuizHSBCanvas(quizUserH);
     updateQuizUI();
     renderList(); // 模糊右侧数值
   }
 
   function submitQuiz() {
-    let diffH = Math.abs(quizUserH - quizTargetColor.h);
+    // 将玩家在 Quiz 中调出的 HSV 换算回 HSL 进行评分
+    const userRgb = hsvToRgb(quizUserH, quizUserS / 100, quizUserV / 100);
+    const userHsl = rgbToHsl(userRgb.r, userRgb.g, userRgb.b);
+
+    let diffH = Math.abs(userHsl.h - quizTargetColor.h);
     if (diffH > 180) diffH = 360 - diffH;
 
-    const diffS = Math.abs(quizUserS - quizTargetColor.s);
-    const diffL = Math.abs(quizUserL - quizTargetColor.l);
+    const diffS = Math.abs(userHsl.s - quizTargetColor.s);
+    const diffL = Math.abs(userHsl.l - quizTargetColor.l);
 
     const totalDiff = diffH + diffS + diffL;
     const score = Math.max(0, 100 - totalDiff);
@@ -830,7 +844,7 @@
     document.getElementById('quiz-score-num').innerText = `${score} 分`;
     document.getElementById('quiz-score-detail').innerHTML = `
       目标真实值: H:${quizTargetColor.h}° S:${quizTargetColor.s}% L:${quizTargetColor.l}%<br>
-      你的猜测值: H:${quizUserH}° S:${quizUserS}% L:${quizUserL}%<br>
+      你的猜测值: H:${userHsl.h}° S:${userHsl.s}% L:${userHsl.l}%<br>
       (总误差: ${totalDiff})
     `;
 
@@ -854,6 +868,7 @@
     updateUI();
   }
 
+  // 色彩转换公用函数 (RGB <-> HSL <-> HSV/HSB)
   function rgbToHsl(r, g, b) {
     r /= 255; g /= 255; b /= 255;
     const max = Math.max(r, g, b), min = Math.min(r, g, b);
@@ -874,26 +889,40 @@
     return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
   }
 
-  function hslToRgb(h, s, l) {
-    let r, g, b;
-    h /= 360;
+  function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const d = max - min;
+    let h, s = max === 0 ? 0 : d / max, v = max;
 
-    if (s === 0) {
-      r = g = b = l;
+    if (max === min) {
+      h = 0;
     } else {
-      const hue2rgb = (p, q, t) => {
-        if (t < 0) t += 1;
-        if (t > 1) t -= 1;
-        if (t < 1/6) return p + (q - p) * 6 * t;
-        if (t < 1/2) return q;
-        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-        return p;
-      };
-      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-      const p = 2 * l - q;
-      r = hue2rgb(p, q, h + 1/3);
-      g = hue2rgb(p, q, h);
-      b = hue2rgb(p, q, h - 1/3);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+    return { h: Math.round(h * 360), s: Math.round(s * 100), v: Math.round(v * 100) };
+  }
+
+  function hsvToRgb(h, s, v) {
+    let r, g, b;
+    const i = Math.floor((h / 60) % 6);
+    const f = (h / 60) - Math.floor(h / 60);
+    const p = v * (1 - s);
+    const q = v * (1 - f * s);
+    const t = v * (1 - (1 - f) * s);
+
+    switch (i) {
+      case 0: r = v; g = t; b = p; break;
+      case 1: r = q; g = v; b = p; break;
+      case 2: r = p; g = v; b = t; break;
+      case 3: r = p; g = q; b = v; break;
+      case 4: r = t; g = p; b = v; break;
+      case 5: r = v; g = p; b = q; break;
     }
     return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
   }
