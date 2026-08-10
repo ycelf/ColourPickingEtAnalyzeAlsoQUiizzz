@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>本地色彩拆解与分析工具</title>
+<link rel="icon" type="image/png" href="my_icon.png">
+  <style>
+    :root {
+      --bg-color: #1a1a1a;
+      --panel-bg: #262626;
+      --canvas-bg: #121212;
+      --border-color: #3e3e3e;
+      --text-color: #e0e0e0;
+      --accent-color: #00adb5;
+      --active-color: #00fff5;
+    }
+
+    body.theme-dark {
+      --bg-color: #1a1a1a;
+      --panel-bg: #262626;
+      --canvas-bg: #121212;
+      --border-color: #3e3e3e;
+      --text-color: #e0e0e0;
+    }
+
+    body.theme-light {
+      --bg-color: #ffffff;
+      --panel-bg: #f0f0f0;
+      --canvas-bg: #e5e5e5;
+      --border-color: #cccccc;
+      --text-color: #1a1a1a;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    #main-layout { display: flex; width: 100vw; height: 100vh; }
+    
+    /* 左侧图像工作区 */
+    #left-pane { 
+      flex: 1; 
+      display: flex; 
+      flex-direction: column; 
+      border-right: 1px solid var(--border-color); 
+      position: relative;
+    }
+    
+    .toolbar { 
+      padding: 10px; 
+      background: var(--panel-bg);
+      border-bottom: 1px solid var(--border-color); 
+      display: flex; 
+      align-items: center; 
+      gap: 15px; 
+    }
+    .btn { 
+      background: #333; 
+      color: #fff; 
+      border: 1px solid var(--border-color); 
+      padding: 6px 12px; 
+      border-radius: 4px; 
+      cursor: pointer; 
+      font-size: 13px; 
+    }
+    body.theme-light .btn { background: #e0e0e0; color: #1a1a1a; }
+    .btn:hover { border-color: var(--accent-color); }
+    
+    .canvas-container { 
+      flex: 1; 
+      position: relative; 
+      overflow: hidden; 
+      background: var(--canvas-bg); 
+      cursor: crosshair; 
+      transition: background-color 0.2s;
+    }
+    #image-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+
+    /* 中间面板 */
+    #center-pane { 
+      width: 340px; 
+      border-right: 1px solid var(--border-color); 
+      display: flex; 
+      flex-direction: column; 
+      padding: 15px; 
+      background: var(--panel-bg); 
+      gap: 12px; 
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+    .panel-title { font-size: 13px; font-weight: bold; opacity: 0.8; margin-bottom: 4px; }
+    
+    #sl-picker-container { position: relative; width: 300px; height: 300px; margin: 0 auto; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; }
+    #sl-canvas { width: 100%; height: 100%; display: block; }
+    
+    /* Quiz 参照目标色遮罩 */
+    #quiz-target-mask {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      display: none; justify-content: center; align-items: center;
+      color: #fff; font-weight: bold; font-size: 16px; text-shadow: 0 0 6px rgba(0,0,0,0.8);
+      z-index: 50;
+    }
+
+    #hue-ring-container { position: relative; width: 300px; height: 20px; margin: 0 auto; }
+    #hue-canvas { width: 100%; height: 100%; border-radius: 10px; display: block; }
+
+    /* Quiz 板块内部独立调色盘 */
+    #quiz-section {
+      margin-top: 5px;
+      padding: 10px;
+      border: 1px dashed var(--border-color);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #quiz-sl-container { position: relative; width: 260px; height: 160px; margin: 0 auto; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; cursor: crosshair; }
+    #quiz-sl-canvas { width: 100%; height: 100%; display: block; }
+    
+    #quiz-hue-container { position: relative; width: 260px; height: 16px; margin: 0 auto; cursor: pointer; }
+    #quiz-hue-canvas { width: 100%; height: 100%; border-radius: 8px; display: block; }
+
+    #quiz-picker-marker {
+      position: absolute; width: 12px; height: 12px; border-radius: 50%;
+      border: 2px solid #fff; box-shadow: 0 0 4px #000; transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    #quiz-hue-marker {
+      position: absolute; top: 0; width: 4px; height: 16px; background: #fff;
+      border: 1px solid #000; transform: translateX(-50%); pointer-events: none;
+    }
+
+    /* 右侧：色彩列表 */
+    #right-pane { 
+      width: 380px; 
+      display: flex; 
+      flex-direction: column; 
+      background: var(--panel-bg); 
+      padding: 15px; 
+      gap: 10px; 
+      flex-shrink: 0; 
+    }
+    .list-header { display: flex; justify-content: space-between; align-items: center; }
+    .color-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px; }
+    
+    .color-item {
+      display: flex; align-items: center; gap: 10px; padding: 8px; background: rgba(0,0,0,0.12);
+      border: 1px solid transparent; border-radius: 4px; cursor: grab; position: relative;
+    }
+    .color-item:active { cursor: grabbing; }
+    .color-item.dragging { opacity: 0.4; border: 1px dashed var(--accent-color); }
+    .color-item.drag-over { border-top: 2px solid var(--active-color); }
+    .color-item:hover { border-color: var(--accent-color); }
+    .color-item.selected { border-color: var(--active-color); box-shadow: 0 0 8px rgba(0,255,245,0.2); }
+    
+    .drag-handle { cursor: grab; opacity: 0.4; font-size: 13px; line-height: 1; }
+    .color-preview { width: 28px; height: 28px; border-radius: 4px; border: 1px solid rgba(128,128,128,0.3); flex-shrink: 0; }
+    .color-info { flex: 1; font-family: monospace; font-size: 12px; transition: filter 0.2s; }
+    
+    .color-info.quiz-masked {
+      filter: blur(5px);
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .delete-btn { opacity: 0.6; padding: 2px 6px; cursor: pointer; border-radius: 3px; }
+    .delete-btn:hover { opacity: 1; color: #ff5555; }
+
+    /* 悬停 Preview 浮窗 */
+    #hover-tooltip {
+      position: fixed; display: none; z-index: 999; background: #1f1f1f; color: #fff;
+      border: 1px solid var(--accent-color); padding: 8px; border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: none; width: 160px;
+    }
+    #hover-tooltip canvas { width: 144px; height: 144px; border-radius: 4px; display: block; }
+    #hover-tooltip .pos-info { font-size: 11px; font-family: monospace; color: #aaa; margin-top: 4px; text-align: center; }
+
+    /* 标记点 */
+    .color-marker {
+      position: absolute; width: 12px; height: 12px; border-radius: 50%;
+      border: 2px solid #fff; box-shadow: 0 0 3px #000; transform: translate(-50%, -50%);
+      pointer-events: auto; cursor: pointer;
+    }
+    .color-marker.selected { transform: translate(-50%, -50%) scale(1.5); border-color: var(--active-color); z-index: 10; }
+    
+    .hue-marker {
+      position: absolute; top: 0; width: 4px; height: 20px; background: #fff;
+      border: 1px solid #000; transform: translateX(-50%); pointer-events: auto; cursor: pointer;
+    }
+    .hue-marker.selected { background: var(--active-color); width: 6px; z-index: 10; }
+
+    select { background: rgba(0,0,0,0.2); color: inherit; border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+  </style>
+</head>
+<body class="theme-dark">
+
+<div id="main-layout">
+  <!-- 左侧图像工作区 -->
+  <div id="left-pane">
+    <div class="toolbar">
+      <input type="file" id="file-input" accept="image/*" style="display: none;">
+      <button class="btn" onclick="document.getElementById('file-input').click()">打开本地图片</button>
+      <label style="font-size: 13px;">采样：
+        <select id="sample-size">
+          <option value="1">1x1 单像素</option>
+          <option value="3" selected>3x3 区域平均</option>
+          <option value="5">5x5 区域平均</option>
+        </select>
+      </label>
+      <label style="font-size: 13px;">背景：
+        <select id="theme-select" onchange="changeTheme(this.value)">
+          <option value="theme-dark">深色</option>
+          <option value="theme-light">浅色</option>
+        </select>
+      </label>
+      <span id="hover-color-val" style="font-family: monospace; font-size: 13px; margin-left: auto;">RGB: - | HSL: -</span>
+    </div>
+    <div class="canvas-container" id="canvas-container">
+      <canvas id="image-canvas"></canvas>
+    </div>
+    <div style="padding: 6px 12px; font-size: 11px; opacity: 0.6; font-family: monospace; background: var(--panel-bg); border-top: 1px solid var(--border-color);">
+      操作提示：滚轮缩放 | 鼠标中键拖拽 | 左键取色（取色将自动打断盲测小游戏）
+    </div>
+  </div>
+
+  <!-- 中间：主色盘 + 盲测挑战 -->
+  <div id="center-pane">
+    <div class="panel-title" id="sl-title">S-L 色度分布盘 (饱和度-明度)</div>
+    <div id="sl-picker-container">
+      <canvas id="sl-canvas" width="300" height="300"></canvas>
+      <div id="sl-markers-layer"></div>
+      <div id="quiz-target-mask">🎯 参照目标色 (凭记忆复刻)</div>
+    </div>
+
+    <div id="hue-ring-wrapper">
+      <div class="panel-title" style="margin-top: 5px;">H 色相环分布</div>
+      <div id="hue-ring-container">
+        <canvas id="hue-canvas" width="300" height="20"></canvas>
+        <div id="hue-markers-layer"></div>
+      </div>
+    </div>
+
+    <!-- 盲测 Quiz 互动区 -->
+    <div id="quiz-section">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span class="panel-title" style="margin:0;">🎯 色彩记忆盲测 Challenge</span>
+      </div>
+      
+      <!-- 准备界面 -->
+      <div id="quiz-start-view">
+        <p style="font-size: 11px; opacity: 0.7; margin-bottom: 8px;">考考你的绝对色感：尝试在专属调色盘上调出上方目标颜色的真实 HSL 值！</p>
+        <button class="btn" style="width: 100%;" onclick="startQuiz()">开始盲测挑战</button>
+      </div>
+
+      <!-- 盲测进行中：专属独立调色盘 -->
+      <div id="quiz-play-view" style="display: none; flex-direction: column; gap: 8px;">
+        <p style="font-size: 11px; opacity: 0.7; text-align: center;">在下方专属调色盘上操作：</p>
+
+        <!-- 专属 S-L 盘 -->
+        <div id="quiz-sl-container">
+          <canvas id="quiz-sl-canvas" width="260" height="160"></canvas>
+          <div id="quiz-picker-marker"></div>
+        </div>
+
+        <!-- 专属 H 色环 -->
+        <div id="quiz-hue-container">
+          <canvas id="quiz-hue-canvas" width="260" height="16"></canvas>
+          <div id="quiz-hue-marker"></div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; margin-top: 2px;">
+          <span style="font-size: 11px; opacity: 0.8;">预览:</span>
+          <div id="quiz-user-preview" style="flex: 1; height: 22px; border-radius: 4px; border: 1px solid var(--border-color);"></div>
+        </div>
+        <button class="btn" style="margin-top: 2px;" onclick="submitQuiz()">提交匹配打分</button>
+      </div>
+
+      <!-- 结算界面 -->
+      <div id="quiz-result-view" style="display: none; flex-direction: column; gap: 8px; text-align: center;">
+        <div id="quiz-score-num" style="font-size: 28px; font-weight: bold; color: var(--active-color);">95 分</div>
+        <div id="quiz-score-detail" style="font-size: 11px; font-family: monospace; opacity: 0.8;"></div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn" style="flex: 1;" onclick="startQuiz()">再来一次</button>
+          <button class="btn" style="flex: 1;" onclick="stopQuiz()">结束测试</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右侧色彩列表 -->
+  <div id="right-pane">
+    <div class="list-header">
+      <div class="panel-title">已选色彩</div>
+      <button class="btn" onclick="clearAllColors()">清空列表</button>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center; font-size: 12px;">
+      <label>排序：</label>
+      <select id="sort-type" onchange="sortColors()" style="flex: 1;">
+        <option value="default">自定义拖拽顺序</option>
+        <option value="h">按色相 (H)</option>
+        <option value="s">按饱和度 (S)</option>
+        <option value="l">按明度 (L)</option>
+      </select>
+    </div>
+    <div class="color-list" id="color-list"></div>
+    <div style="display: flex; gap: 8px; margin-top: auto;">
+      <button class="btn" style="flex: 1;" onclick="exportData('json')">导出 JSON</button>
+      <button class="btn" style="flex: 1;" onclick="exportData('css')">导出 CSS</button>
+      <button class="btn" style="flex: 1;" onclick="exportData('csv')">导出 CSV</button>
+    </div>
+  </div>
+</div>
+
+<!-- 悬停 Preview 浮窗 -->
+<div id="hover-tooltip">
+  <canvas id="tooltip-sl-canvas" width="144" height="144"></canvas>
+  <div class="pos-info" id="tooltip-pos">X: 0, Y: 0</div>
+</div>
+
+<script>
+  let colorData = [];
+  let selectedIndex = -1;
+  let img = null;
+
+  let scale = 1, panX = 0, panY = 0;
+  let isPanning = false, startX = 0, startY = 0;
+  let dragSrcIndex = -1;
+
+  // Quiz 盲测状态
+  let isQuizActive = false;
+  let quizTargetColor = null;
+  let quizUserH = 180, quizUserS = 50, quizUserL = 50;
+  let isDraggingQuizSL = false, isDraggingQuizHue = false;
+
+  const container = document.getElementById('canvas-container');
+  const imageCanvas = document.getElementById('image-canvas');
+  const imgCtx = imageCanvas.getContext('2d');
+  
+  const slCanvas = document.getElementById('sl-canvas');
+  const slCtx = slCanvas.getContext('2d');
+  const hueCanvas = document.getElementById('hue-canvas');
+  const hueCtx = hueCanvas.getContext('2d');
+
+  const quizSlCanvas = document.getElementById('quiz-sl-canvas');
+  const quizSlCtx = quizSlCanvas.getContext('2d');
+  const quizHueCanvas = document.getElementById('quiz-hue-canvas');
+  const quizHueCtx = quizHueCanvas.getContext('2d');
+
+  function changeTheme(theme) { document.body.className = theme; }
+
+  function initHueRings() {
+    const grad = hueCtx.createLinearGradient(0, 0, hueCanvas.width, 0);
+    for (let i = 0; i <= 360; i += 10) grad.addColorStop(i / 360, `hsl(${i}, 100%, 50%)`);
+    hueCtx.fillStyle = grad;
+    hueCtx.fillRect(0, 0, hueCanvas.width, hueCanvas.height);
+
+    const quizGrad = quizHueCtx.createLinearGradient(0, 0, quizHueCanvas.width, 0);
+    for (let i = 0; i <= 360; i += 10) quizGrad.addColorStop(i / 360, `hsl(${i}, 100%, 50%)`);
+    quizHueCtx.fillStyle = quizGrad;
+    quizHueCtx.fillRect(0, 0, quizHueCanvas.width, quizHueCanvas.height);
+  }
+  initHueRings();
+  renderSLCanvas(0);
+
+  // 加载图片
+  document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      img = new Image();
+      img.onload = () => {
+        imageCanvas.width = img.width;
+        imageCanvas.height = img.height;
+        const rect = container.getBoundingClientRect();
+        scale = Math.min(rect.width / img.width, rect.height / img.height) * 0.9;
+        panX = (rect.width - img.width * scale) / 2;
+        panY = (rect.height - img.height * scale) / 2;
+        redrawCanvas();
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function updateCanvasTransform() {
+    imageCanvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+  }
+
+  function redrawCanvas() {
+    if (!img) return;
+    updateCanvasTransform();
+    imgCtx.drawImage(img, 0, 0);
+
+    colorData.forEach((item, index) => {
+      const isSelected = index === selectedIndex;
+      imgCtx.save();
+      imgCtx.beginPath();
+      imgCtx.arc(item.x, item.y, isSelected ? 8 / scale : 5 / scale, 0, Math.PI * 2);
+      imgCtx.fillStyle = `rgb(${item.r},${item.g},${item.b})`;
+      imgCtx.fill();
+      imgCtx.lineWidth = 2 / scale;
+      imgCtx.strokeStyle = isSelected ? '#00fff5' : '#ffffff';
+      imgCtx.stroke();
+      imgCtx.restore();
+    });
+  }
+
+  // 画布缩放与平移
+  container.addEventListener('wheel', (e) => {
+    if (!img) return;
+    e.preventDefault();
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+    const rect = container.getBoundingClientRect();
+    panX = (e.clientX - rect.left) - ((e.clientX - rect.left) - panX) * zoomFactor;
+    panY = (e.clientY - rect.top) - ((e.clientY - rect.top) - panY) * zoomFactor;
+    scale *= zoomFactor;
+    redrawCanvas();
+  });
+
+  container.addEventListener('mousedown', (e) => {
+    if (e.button === 1) {
+      e.preventDefault();
+      isPanning = true;
+      startX = e.clientX - panX;
+      startY = e.clientY - panY;
+    }
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (isPanning) {
+      panX = e.clientX - startX;
+      panY = e.clientY - startY;
+      updateCanvasTransform();
+    }
+  });
+
+  window.addEventListener('mouseup', (e) => { if (e.button === 1) isPanning = false; });
+
+  // 原图取色（可打断 Quiz）
+  container.addEventListener('click', (e) => {
+    if (!img || e.button !== 0) return;
+    if (isQuizActive) stopQuiz();
+
+    const rect = container.getBoundingClientRect();
+    const x = Math.floor(((e.clientX - rect.left) - panX) / scale);
+    const y = Math.floor(((e.clientY - rect.top) - panY) / scale);
+
+    if (x < 0 || x >= img.width || y < 0 || y >= img.height) return;
+
+    const size = parseInt(document.getElementById('sample-size').value);
+    const rgb = getAverageRGB(x, y, size);
+    const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+
+    const item = { id: Date.now(), x, y, r: rgb.r, g: rgb.g, b: rgb.b, h: hsl.h, s: hsl.s, l: hsl.l };
+    colorData.push(item);
+    
+    selectedIndex = colorData.length - 1;
+    document.getElementById('sort-type').value = 'default';
+    updateUI();
+  });
+
+  container.addEventListener('mousemove', (e) => {
+    if (!img) return;
+    const rect = container.getBoundingClientRect();
+    const x = Math.floor(((e.clientX - rect.left) - panX) / scale);
+    const y = Math.floor(((e.clientY - rect.top) - panY) / scale);
+
+    if (x >= 0 && x < img.width && y >= 0 && y < img.height) {
+      const size = parseInt(document.getElementById('sample-size').value);
+      const rgb = getAverageRGB(x, y, size);
+      const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+      document.getElementById('hover-color-val').innerText = 
+        `RGB: (${rgb.r},${rgb.g},${rgb.b}) | HSL: (${hsl.h}°, ${hsl.s}%, ${hsl.l}%)`;
+    }
+  });
+
+  function getAverageRGB(startX, startY, size) {
+    const half = Math.floor(size / 2);
+    let r = 0, g = 0, b = 0, count = 0;
+    const data = imgCtx.getImageData(
+      Math.max(0, startX - half), Math.max(0, startY - half), size, size
+    ).data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      r += data[i]; g += data[i+1]; b += data[i+2]; count++;
+    }
+    return { r: Math.round(r / count), g: Math.round(g / count), b: Math.round(b / count) };
+  }
+
+  function renderSLCanvas(hue) {
+    const width = slCanvas.width;
+    const height = slCanvas.height;
+    const imgData = slCtx.createImageData(width, height);
+    let idx = 0;
+
+    for (let y = 0; y < height; y++) {
+      const l = 1 - (y / height);
+      for (let x = 0; x < width; x++) {
+        const s = x / width;
+        const rgb = hslToRgb(hue, s, l);
+        imgData.data[idx] = rgb.r;
+        imgData.data[idx+1] = rgb.g;
+        imgData.data[idx+2] = rgb.b;
+        imgData.data[idx+3] = 255;
+        idx += 4;
+      }
+    }
+    slCtx.putImageData(imgData, 0, 0);
+  }
+
+  function renderQuizSLCanvas(hue) {
+    const width = quizSlCanvas.width;
+    const height = quizSlCanvas.height;
+    const imgData = quizSlCtx.createImageData(width, height);
+    let idx = 0;
+
+    for (let y = 0; y < height; y++) {
+      const l = 1 - (y / height);
+      for (let x = 0; x < width; x++) {
+        const s = x / width;
+        const rgb = hslToRgb(hue, s, l);
+        imgData.data[idx] = rgb.r;
+        imgData.data[idx+1] = rgb.g;
+        imgData.data[idx+2] = rgb.b;
+        imgData.data[idx+3] = 255;
+        idx += 4;
+      }
+    }
+    quizSlCtx.putImageData(imgData, 0, 0);
+  }
+
+  function updateUI() {
+    sortColors();
+    redrawCanvas();
+    renderMarkers();
+    renderList();
+  }
+
+  function renderMarkers() {
+    const slLayer = document.getElementById('sl-markers-layer');
+    const hueLayer = document.getElementById('hue-markers-layer');
+    slLayer.innerHTML = '';
+    hueLayer.innerHTML = '';
+
+    if (isQuizActive) return;
+
+    const currentHue = selectedIndex >= 0 && colorData[selectedIndex] ? colorData[selectedIndex].h : 0;
+    renderSLCanvas(currentHue);
+
+    colorData.forEach((item, index) => {
+      const marker = document.createElement('div');
+      marker.className = `color-marker ${index === selectedIndex ? 'selected' : ''}`;
+      marker.style.left = `${item.s}%`;
+      marker.style.top = `${100 - item.l}%`;
+      marker.style.backgroundColor = `rgb(${item.r},${item.g},${item.b})`;
+      marker.onclick = (e) => { e.stopPropagation(); selectItem(index); };
+      marker.onmouseenter = () => highlightItem(index, true);
+      marker.onmouseleave = () => highlightItem(index, false);
+      slLayer.appendChild(marker);
+
+      const hMarker = document.createElement('div');
+      hMarker.className = `hue-marker ${index === selectedIndex ? 'selected' : ''}`;
+      hMarker.style.left = `${(item.h / 360) * 100}%`;
+      hMarker.onclick = (e) => { e.stopPropagation(); selectItem(index); };
+      hMarker.onmouseenter = () => highlightItem(index, true);
+      hMarker.onmouseleave = () => highlightItem(index, false);
+      hueLayer.appendChild(hMarker);
+    });
+  }
+
+  function renderList() {
+    const listContainer = document.getElementById('color-list');
+    listContainer.innerHTML = '';
+
+    colorData.forEach((item, index) => {
+      const el = document.createElement('div');
+      el.className = `color-item ${index === selectedIndex ? 'selected' : ''}`;
+      el.draggable = !isQuizActive;
+
+      const maskClass = isQuizActive ? 'quiz-masked' : '';
+
+      el.innerHTML = `
+        <span class="drag-handle">⋮⋮</span>
+        <div class="color-preview" style="background: rgb(${item.r},${item.g},${item.b})"></div>
+        <div class="color-info ${maskClass}">
+          <div>HSL: ${item.h}°, ${item.s}%, ${item.l}%</div>
+          <div style="opacity: 0.6;">RGB: ${item.r}, ${item.g}, ${item.b}</div>
+        </div>
+        <div class="delete-btn" onclick="deleteItem(event, ${index})">✕</div>
+      `;
+
+      if (!isQuizActive) {
+        el.onclick = () => selectItem(index);
+        el.onmouseenter = (e) => showTooltip(e, item, index);
+        el.onmouseleave = () => hideTooltip(index);
+
+        el.addEventListener('dragstart', (e) => { dragSrcIndex = index; el.classList.add('dragging'); });
+        el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('drag-over'); });
+        el.addEventListener('dragleave', () => { el.classList.remove('drag-over'); });
+        el.addEventListener('drop', (e) => {
+          e.preventDefault();
+          el.classList.remove('drag-over');
+          if (dragSrcIndex !== -1 && dragSrcIndex !== index) {
+            const movedItem = colorData.splice(dragSrcIndex, 1)[0];
+            colorData.splice(index, 0, movedItem);
+            if (selectedIndex === dragSrcIndex) selectedIndex = index;
+            document.getElementById('sort-type').value = 'default';
+            updateUI();
+          }
+        });
+        el.addEventListener('dragend', () => { el.classList.remove('dragging'); dragSrcIndex = -1; });
+      }
+
+      listContainer.appendChild(el);
+    });
+  }
+
+  function selectItem(index) {
+    if (isQuizActive) return;
+    selectedIndex = index;
+    updateUI();
+  }
+
+  function deleteItem(e, index) {
+    e.stopPropagation();
+    colorData.splice(index, 1);
+    if (selectedIndex >= colorData.length) selectedIndex = colorData.length - 1;
+    updateUI();
+  }
+
+  function clearAllColors() {
+    colorData = [];
+    selectedIndex = -1;
+    if (isQuizActive) stopQuiz();
+    updateUI();
+  }
+
+  function highlightItem(index, isHover) {
+    const listItems = document.querySelectorAll('.color-item');
+    if (listItems[index]) {
+      if (isHover) listItems[index].style.borderColor = 'var(--active-color)';
+      else if (index !== selectedIndex) listItems[index].style.borderColor = 'transparent';
+    }
+  }
+
+  const tooltip = document.getElementById('hover-tooltip');
+  const tooltipCanvas = document.getElementById('tooltip-sl-canvas');
+  const tooltipCtx = tooltipCanvas.getContext('2d');
+
+  function showTooltip(e, item, index) {
+    if (isQuizActive) return;
+    highlightItem(index, true);
+    tooltip.style.display = 'block';
+    const rect = e.currentTarget.getBoundingClientRect();
+    let left = rect.left - 184, top = rect.top - 20;
+
+    if (left < 10) left = rect.right + 8;
+    if (top + 180 > window.innerHeight - 10) top = window.innerHeight - 190;
+    if (top < 10) top = 10;
+
+    tooltip.style.top = `${top}px`;
+    tooltip.style.left = `${left}px`;
+    document.getElementById('tooltip-pos').innerText = `原图坐标 (X: ${item.x}, Y: ${item.y})`;
+
+    const width = tooltipCanvas.width, height = tooltipCanvas.height;
+    const imgData = tooltipCtx.createImageData(width, height);
+    let idx = 0;
+    for (let y = 0; y < height; y++) {
+      const l = 1 - (y / height);
+      for (let x = 0; x < width; x++) {
+        const rgb = hslToRgb(item.h, x / width, l);
+        imgData.data[idx] = rgb.r; imgData.data[idx+1] = rgb.g; imgData.data[idx+2] = rgb.b; imgData.data[idx+3] = 255;
+        idx += 4;
+      }
+    }
+    tooltipCtx.putImageData(imgData, 0, 0);
+
+    tooltipCtx.strokeStyle = '#fff';
+    tooltipCtx.beginPath();
+    tooltipCtx.arc((item.s / 100) * width, (1 - item.l / 100) * height, 4, 0, Math.PI * 2);
+    tooltipCtx.stroke();
+  }
+
+  function hideTooltip(index) {
+    highlightItem(index, false);
+    tooltip.style.display = 'none';
+  }
+
+  function sortColors() {
+    const type = document.getElementById('sort-type').value;
+    if (type === 'default') return;
+    const selectedItem = colorData[selectedIndex];
+    colorData.sort((a, b) => a[type] - b[type]);
+    if (selectedItem) selectedIndex = colorData.findIndex(item => item.id === selectedItem.id);
+  }
+
+  function exportData(type) {
+    if (colorData.length === 0) return alert('当前没有可导出的颜色数据');
+    let content = '', filename = `colors_export.${type}`, mime = 'text/plain';
+
+    if (type === 'json') {
+      content = JSON.stringify(colorData, null, 2);
+      mime = 'application/json';
+    } else if (type === 'css') {
+      content = ':root {\n' + colorData.map((c, i) => `  --color-${i + 1}: hsl(${c.h}, ${c.s}%, ${c.l}%); /* RGB: ${c.r},${c.g},${c.b} */`).join('\n') + '\n}';
+    } else if (type === 'csv') {
+      content = 'Index,X,Y,R,G,B,H,S,L\n' + colorData.map((c, i) => `${i+1},${c.x},${c.y},${c.r},${c.g},${c.b},${c.h},${c.s},${c.l}`).join('\n');
+      mime = 'text/csv';
+    }
+
+    const blob = new Blob([content], { type: mime });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+  }
+
+  /* -----------------------------------------------------------
+   * 🎯 盲测专属新色盘点选逻辑
+   * ----------------------------------------------------------- */
+  const quizSlContainer = document.getElementById('quiz-sl-container');
+  const quizHueContainer = document.getElementById('quiz-hue-container');
+
+  quizSlContainer.addEventListener('mousedown', (e) => {
+    isDraggingQuizSL = true;
+    updateQuizSLFromMouse(e);
+  });
+
+  quizHueContainer.addEventListener('mousedown', (e) => {
+    isDraggingQuizHue = true;
+    updateQuizHueFromMouse(e);
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isQuizActive) return;
+    if (isDraggingQuizSL) updateQuizSLFromMouse(e);
+    if (isDraggingQuizHue) updateQuizHueFromMouse(e);
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDraggingQuizSL = false;
+    isDraggingQuizHue = false;
+  });
+
+  function updateQuizHueFromMouse(e) {
+    const rect = quizHueContainer.getBoundingClientRect();
+    let x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    quizUserH = Math.round((x / rect.width) * 360);
+    renderQuizSLCanvas(quizUserH);
+    updateQuizUI();
+  }
+
+  function updateQuizSLFromMouse(e) {
+    const rect = quizSlContainer.getBoundingClientRect();
+    let x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    let y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+
+    quizUserS = Math.round((x / rect.width) * 100);
+    quizUserL = Math.round((1 - y / rect.height) * 100);
+    updateQuizUI();
+  }
+
+  function updateQuizUI() {
+    const pickerMarker = document.getElementById('quiz-picker-marker');
+    pickerMarker.style.left = `${quizUserS}%`;
+    pickerMarker.style.top = `${100 - quizUserL}%`;
+    pickerMarker.style.backgroundColor = `hsl(${quizUserH}, ${quizUserS}%, ${quizUserL}%)`;
+
+    const hueMarker = document.getElementById('quiz-hue-marker');
+    hueMarker.style.left = `${(quizUserH / 360) * 100}%`;
+
+    document.getElementById('quiz-user-preview').style.backgroundColor = `hsl(${quizUserH}, ${quizUserS}%, ${quizUserL}%)`;
+  }
+
+  function startQuiz() {
+    if (colorData.length === 0) {
+      alert('请先在左侧图片上提取至少一个颜色，才能开始盲测！');
+      return;
+    }
+
+    isQuizActive = true;
+    const randIdx = Math.floor(Math.random() * colorData.length);
+    quizTargetColor = colorData[randIdx];
+
+    quizUserH = 180; quizUserS = 50; quizUserL = 50;
+
+    // 主色盘隐藏 Marker，遮罩目标色
+    document.getElementById('sl-markers-layer').style.display = 'none';
+    document.getElementById('hue-markers-layer').style.display = 'none';
+    
+    const mask = document.getElementById('quiz-target-mask');
+    mask.style.display = 'flex';
+    mask.style.backgroundColor = `hsl(${quizTargetColor.h}, ${quizTargetColor.s}%, ${quizTargetColor.l}%)`;
+
+    document.getElementById('quiz-start-view').style.display = 'none';
+    document.getElementById('quiz-result-view').style.display = 'none';
+    document.getElementById('quiz-play-view').style.display = 'flex';
+
+    renderQuizSLCanvas(quizUserH);
+    updateQuizUI();
+    renderList(); // 模糊右侧数值
+  }
+
+  function submitQuiz() {
+    let diffH = Math.abs(quizUserH - quizTargetColor.h);
+    if (diffH > 180) diffH = 360 - diffH;
+
+    const diffS = Math.abs(quizUserS - quizTargetColor.s);
+    const diffL = Math.abs(quizUserL - quizTargetColor.l);
+
+    const totalDiff = diffH + diffS + diffL;
+    const score = Math.max(0, 100 - totalDiff);
+
+    document.getElementById('quiz-target-mask').style.display = 'none';
+    document.getElementById('quiz-play-view').style.display = 'none';
+    document.getElementById('quiz-result-view').style.display = 'flex';
+
+    document.getElementById('quiz-score-num').innerText = `${score} 分`;
+    document.getElementById('quiz-score-detail').innerHTML = `
+      目标真实值: H:${quizTargetColor.h}° S:${quizTargetColor.s}% L:${quizTargetColor.l}%<br>
+      你的猜测值: H:${quizUserH}° S:${quizUserS}% L:${quizUserL}%<br>
+      (总误差: ${totalDiff})
+    `;
+
+    isQuizActive = false;
+    renderList();
+    isQuizActive = true;
+  }
+
+  function stopQuiz() {
+    isQuizActive = false;
+    quizTargetColor = null;
+
+    document.getElementById('sl-markers-layer').style.display = 'block';
+    document.getElementById('hue-markers-layer').style.display = 'block';
+    document.getElementById('quiz-target-mask').style.display = 'none';
+
+    document.getElementById('quiz-start-view').style.display = 'block';
+    document.getElementById('quiz-play-view').style.display = 'none';
+    document.getElementById('quiz-result-view').style.display = 'none';
+
+    updateUI();
+  }
+
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+
+    if (max === min) {
+      h = s = 0;
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+    return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+  }
+
+  function hslToRgb(h, s, l) {
+    let r, g, b;
+    h /= 360;
+
+    if (s === 0) {
+      r = g = b = l;
+    } else {
+      const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      };
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1/3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1/3);
+    }
+    return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+  }
+</script>
+</body>
+</html>
