@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>本地色彩拆解与分析工具 (视觉感知色彩合并版)</title>
-  <link rel="icon" type="image/png" href="my_icon.png?v=2">
+  <title>本地色彩拆解与分析工具 (跨零点色环+羽化平滑版)</title>
   <style>
     :root {
       --bg-color: #1a1a1a;
@@ -94,7 +93,10 @@
       transition: background-color 0.2s;
     }
     #image-canvas, #highlight-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
-    #highlight-canvas { pointer-events: none; }
+    #highlight-canvas { 
+      pointer-events: none; 
+      filter: blur(0.6px); /* 羽化消除方块噪点感 */
+    }
 
     /* 中间面板 */
     #center-pane { 
@@ -352,15 +354,18 @@
       <canvas id="highlight-canvas"></canvas>
     </div>
     <div style="padding: 6px 12px; font-size: 11px; opacity: 0.6; font-family: monospace; background: var(--panel-bg); border-top: 1px solid var(--border-color); flex-shrink: 0;">
-      提示：Ctrl+V 粘贴 | 滚轮缩放 | 鼠标中键拖拽 | 左键取色 | 内圈色盘画套索展示高亮对比
+      提示：Ctrl+V 粘贴 | 滚轮缩放 | 鼠标中键拖拽 | 左键取色 | H色环(支持红玫红跨零点)/SV套索独立框选
     </div>
   </div>
 
   <!-- 中间：PS/Procreate 环包方色盘 + 置顶 Quiz + 试色板 + 直方图 -->
   <div id="center-pane">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 4px;">
       <div class="panel-title" id="sl-title" style="margin:0;">环包方色盘</div>
-      <button class="btn" style="padding: 2px 8px; font-size: 11px; height: 22px;" onclick="clearLasso()">🧹 清除框选</button>
+      <div style="display: flex; gap: 4px; margin-left: auto;">
+        <button class="btn" style="padding: 2px 6px; font-size: 10px; height: 22px;" onclick="clearHueRange()">清空H选区</button>
+        <button class="btn" style="padding: 2px 6px; font-size: 10px; height: 22px;" onclick="clearLasso()">清空SV套索</button>
+      </div>
     </div>
     <div id="picker-wrapper">
       <canvas id="picker-canvas" width="300" height="300"></canvas>
@@ -466,7 +471,7 @@
     </div>
     <div class="color-list" id="color-list"></div>
 
-    <!-- 📊 画面色彩占比分析板块 (优化后的视觉感知算法) -->
+    <!-- 📊 画面色彩占比分析板块 -->
     <div id="ratio-analysis-section">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <span class="panel-title" style="margin:0;">📊 视觉色彩占比分析</span>
@@ -512,7 +517,12 @@
   const sqSize = 160;
   let currentHue = 180;
 
-  // 套索交互状态
+  // 色环 Hue Range 框选选区 {start, end, isWrapped}
+  let hueRange = null; 
+  let isDraggingHueSelection = false;
+  let hueDragStart = 0;
+
+  // 正方形 SV 套索选区
   let isLassoing = false;
   let lassoPath = []; 
   let selectedHsvIndices = new Set();
@@ -543,7 +553,7 @@
 
   function changeTheme(theme) { document.body.className = theme; }
 
-  // 渲染 Procreate / PS 风格环包方色盘
+  // 渲染 Procreate / PS 风格环包方色盘 (带跨零点色环弧度与指示)
   function renderMainPicker() {
     const cx = 150, cy = 150;
     pickerCtx.clearRect(0, 0, 300, 300);
@@ -558,16 +568,49 @@
       pickerCtx.stroke();
     }
 
-    // 绘制外圈当前 H 色相指示线
-    const hRad = (currentHue * Math.PI) / 180;
-    pickerCtx.save();
-    pickerCtx.beginPath();
-    pickerCtx.lineWidth = 3;
-    pickerCtx.strokeStyle = '#ffffff';
-    pickerCtx.moveTo(cx + Math.cos(hRad) * innerR, cy + Math.sin(hRad) * innerR);
-    pickerCtx.lineTo(cx + Math.cos(hRad) * outerR, cy + Math.sin(hRad) * outerR);
-    pickerCtx.stroke();
-    pickerCtx.restore();
+    // 1b. 在外圈色环上，绘制已提取色彩的 H 色相指示点
+    colorData.forEach((item) => {
+      if (item.imageId === currentImgId) {
+        const rad = (item.h * Math.PI) / 180;
+        const mr = (outerR + innerR) / 2;
+        const mx = cx + Math.cos(rad) * mr;
+        const my = cy + Math.sin(rad) * mr;
+
+        pickerCtx.save();
+        pickerCtx.beginPath();
+        pickerCtx.arc(mx, my, 4, 0, Math.PI * 2);
+        pickerCtx.fillStyle = '#ffffff';
+        pickerCtx.fill();
+        pickerCtx.strokeStyle = '#000000';
+        pickerCtx.lineWidth = 1.5;
+        pickerCtx.stroke();
+        pickerCtx.restore();
+      }
+    });
+
+    // 1c. 绘制外圈 Hue 框选角度扇形弧 (支持跨越 0° 正红/玫红衔接)
+    if (hueRange) {
+      const startRad = (hueRange.start * Math.PI) / 180;
+      const endRad = (hueRange.end * Math.PI) / 180;
+
+      pickerCtx.save();
+      pickerCtx.beginPath();
+      pickerCtx.arc(cx, cy, (outerR + innerR) / 2, startRad, endRad, hueRange.isWrapped);
+      pickerCtx.strokeStyle = '#00fff5';
+      pickerCtx.lineWidth = outerR - innerR + 4;
+      pickerCtx.stroke();
+      pickerCtx.restore();
+    } else {
+      const hRad = (currentHue * Math.PI) / 180;
+      pickerCtx.save();
+      pickerCtx.beginPath();
+      pickerCtx.lineWidth = 3;
+      pickerCtx.strokeStyle = '#ffffff';
+      pickerCtx.moveTo(cx + Math.cos(hRad) * innerR, cy + Math.sin(hRad) * innerR);
+      pickerCtx.lineTo(cx + Math.cos(hRad) * outerR, cy + Math.sin(hRad) * outerR);
+      pickerCtx.stroke();
+      pickerCtx.restore();
+    }
 
     // 2. 绘制内圈正方形 S-V 盘
     const sqLeft = cx - sqSize / 2;
@@ -592,7 +635,7 @@
     pickerCtx.lineWidth = 1;
     pickerCtx.strokeRect(sqLeft, sqTop, sqSize, sqSize);
 
-    // 3. 绘制套索轨迹
+    // 3. 绘制 SV 套索轨迹
     if (lassoPath.length > 1) {
       pickerCtx.save();
       pickerCtx.beginPath();
@@ -647,6 +690,7 @@
 
       selectedIndex = -1;
       clearLasso();
+      clearHueRange();
 
       redrawCanvas();
       renderHistogram();
@@ -687,7 +731,7 @@
     updateCanvasTransform();
     imgCtx.drawImage(img, 0, 0);
 
-    // 绘制原图上的取色标记点
+    // 绘制原图取色标记点
     colorData.forEach((item, index) => {
       if (item.imageId === currentImgId) {
         const isSelected = index === selectedIndex;
@@ -787,10 +831,8 @@
   }
 
   /* -----------------------------------------------------------
-   * 🎨 环包方色盘交互与套索 (Lasso) 逻辑
+   * 🎨 H色环角度框选 (支持跨越 0° 红/玫红闭环) & SV套索 独立双选区逻辑
    * ----------------------------------------------------------- */
-  let isDraggingHueRing = false;
-
   pickerCanvas.addEventListener('mousedown', (e) => {
     if (isQuizActive) return;
     const rect = pickerCanvas.getBoundingClientRect();
@@ -799,8 +841,12 @@
     const dist = Math.sqrt(x*x + y*y);
 
     if (dist >= innerR && dist <= outerR) {
-      isDraggingHueRing = true;
-      updateHueFromAngle(x, y);
+      isDraggingHueSelection = true;
+      let angle = Math.atan2(y, x) * (180 / Math.PI);
+      if (angle < 0) angle += 360;
+      hueDragStart = Math.round(angle);
+      hueRange = { start: hueDragStart, end: hueDragStart, isWrapped: false };
+      renderMainPicker();
     } else if (Math.abs(x) <= sqSize/2 && Math.abs(y) <= sqSize/2) {
       isLassoing = true;
       lassoPath = [{ x: x + sqSize/2, y: y + sqSize/2 }];
@@ -814,8 +860,19 @@
     const x = e.clientX - rect.left - 150;
     const y = e.clientY - rect.top - 150;
 
-    if (isDraggingHueRing) {
-      updateHueFromAngle(x, y);
+    if (isDraggingHueSelection) {
+      let angle = Math.atan2(y, x) * (180 / Math.PI);
+      if (angle < 0) angle += 360;
+      
+      const endAngle = Math.round(angle);
+      // 判定是否顺时针跨过了 0° (如从 330° 到 30°)
+      const isWrapped = (hueDragStart > endAngle && (hueDragStart - endAngle) > 180) || 
+                        (hueDragStart < endAngle && (endAngle - hueDragStart) > 180);
+
+      hueRange = { start: hueDragStart, end: endAngle, isWrapped };
+      currentHue = endAngle;
+      renderMainPicker();
+      triggerCombinedSelectionHighlight();
     } else if (isLassoing) {
       const sqX = Math.max(0, Math.min(sqSize, x + sqSize/2));
       const sqY = Math.max(0, Math.min(sqSize, y + sqSize/2));
@@ -825,49 +882,82 @@
   });
 
   window.addEventListener('mouseup', () => {
-    if (isDraggingHueRing) isDraggingHueRing = false;
+    if (isDraggingHueSelection) {
+      isDraggingHueSelection = false;
+      triggerCombinedSelectionHighlight();
+    }
     if (isLassoing) {
       isLassoing = false;
       if (lassoPath.length > 3) {
-        triggerLassoHighlight();
+        triggerCombinedSelectionHighlight();
       }
     }
   });
 
-  function updateHueFromAngle(x, y) {
-    let angle = Math.atan2(y, x) * (180 / Math.PI);
-    if (angle < 0) angle += 360;
-    currentHue = Math.round(angle);
+  function clearHueRange() {
+    hueRange = null;
     renderMainPicker();
-    renderMarkers();
+    triggerCombinedSelectionHighlight();
   }
 
   function clearLasso() {
     lassoPath = [];
     selectedHsvIndices.clear();
     renderMainPicker();
-    hlCtx.clearRect(0, 0, highlightCanvas.width, highlightCanvas.height);
-    redrawCanvas();
+    triggerCombinedSelectionHighlight();
   }
 
-  function triggerLassoHighlight() {
+  // 支持跨越 0° (红色-玫红色闭环) 的色相判定算法
+  function isHueInRange(h, range) {
+    if (!range) return true;
+    let s = range.start, e = range.end;
+
+    if (!range.isWrapped) {
+      const min = Math.min(s, e), max = Math.max(s, e);
+      return h >= min && h <= max;
+    } else {
+      // 跨越 0° 零点的情况（例如 320° 到 30°）
+      const min = Math.min(s, e), max = Math.max(s, e);
+      return h >= max || h <= min;
+    }
+  }
+
+  // 复合筛选高亮（平化羽化蒙版，消除方块感）
+  function triggerCombinedSelectionHighlight() {
     if (!img) return;
 
-    const path2d = new Path2D();
-    path2d.moveTo(lassoPath[0].x, lassoPath[0].y);
-    for (let i = 1; i < lassoPath.length; i++) path2d.lineTo(lassoPath[i].x, lassoPath[i].y);
-    path2d.closePath();
+    if (!hueRange && lassoPath.length < 3) {
+      hlCtx.clearRect(0, 0, highlightCanvas.width, highlightCanvas.height);
+      selectedHsvIndices.clear();
+      redrawCanvas();
+      return;
+    }
 
-    const testCanvas = document.createElement('canvas');
-    testCanvas.width = sqSize; testCanvas.height = sqSize;
-    const testCtx = testCanvas.getContext('2d');
+    let path2d = null, testCtx = null;
+    if (lassoPath.length >= 3) {
+      path2d = new Path2D();
+      path2d.moveTo(lassoPath[0].x, lassoPath[0].y);
+      for (let i = 1; i < lassoPath.length; i++) path2d.lineTo(lassoPath[i].x, lassoPath[i].y);
+      path2d.closePath();
+
+      const testCanvas = document.createElement('canvas');
+      testCanvas.width = sqSize; testCanvas.height = sqSize;
+      testCtx = testCanvas.getContext('2d');
+    }
 
     selectedHsvIndices.clear();
     colorData.forEach((item, index) => {
       if (item.imageId === currentImgId) {
-        const sqX = (item.s / 100) * sqSize;
-        const sqY = (1 - item.v / 100) * sqSize;
-        if (testCtx.isPointInPath(path2d, sqX, sqY)) {
+        const hMatch = isHueInRange(item.h, hueRange);
+        
+        let svMatch = true;
+        if (testCtx && path2d) {
+          const sqX = (item.s / 100) * sqSize;
+          const sqY = (1 - item.v / 100) * sqSize;
+          svMatch = testCtx.isPointInPath(path2d, sqX, sqY);
+        }
+
+        if (hMatch && svMatch) {
           selectedHsvIndices.add(index);
         }
       }
@@ -881,15 +971,22 @@
       const r = imgData[i], g = imgData[i+1], b = imgData[i+2];
       const hsv = rgbToHsv(r, g, b);
 
-      const sqX = (hsv.s / 100) * sqSize;
-      const sqY = (1 - hsv.v / 100) * sqSize;
+      const hMatch = isHueInRange(hsv.h, hueRange);
+      
+      let svMatch = true;
+      if (testCtx && path2d) {
+        const sqX = (hsv.s / 100) * sqSize;
+        const sqY = (1 - hsv.v / 100) * sqSize;
+        svMatch = testCtx.isPointInPath(path2d, sqX, sqY);
+      }
 
-      if (testCtx.isPointInPath(path2d, sqX, sqY)) {
+      if (hMatch && svMatch) {
         maskData.data[i] = r;
         maskData.data[i+1] = g;
         maskData.data[i+2] = b;
         maskData.data[i+3] = 255;
       } else {
+        // 未选中区压暗，留出边缘平滑空间
         maskData.data[i] = 15;
         maskData.data[i+1] = 15;
         maskData.data[i+2] = 15;
@@ -902,7 +999,7 @@
   }
 
   /* -----------------------------------------------------------
-   * 📊 画面色彩占比分析逻辑 (改进版：基于 HSL 色相感知与噪音过滤)
+   * 📊 画面色彩占比分析逻辑 (Ratio Analysis)
    * ----------------------------------------------------------- */
   function calculateRatio() {
     if (!img) return;
@@ -927,16 +1024,14 @@
 
       const counts = new Array(colorData.length).fill(0);
 
-      for (let i = 0; i < imgData.length; i += 16) { // 采样加速
+      for (let i = 0; i < imgData.length; i += 16) {
         const r = imgData[i], g = imgData[i+1], b = imgData[i+2];
         const hsv = rgbToHsv(r, g, b);
 
-        // 过滤极其灰/暗/亮的无倾向色彩背景
         if (ignoreGray && (hsv.v < 12 || (hsv.s < 10 && hsv.v > 85))) continue;
 
         validPixels++;
 
-        // 基于色相 H 角度差加权匹配（相比 RGB 欧氏距离更贴近视觉感受）
         let minDiff = Infinity, closestIdx = 0;
         colorData.forEach((item, idx) => {
           let diffH = Math.abs(hsv.h - item.h);
@@ -944,7 +1039,6 @@
           const diffS = Math.abs(hsv.s - item.s);
           const diffV = Math.abs(hsv.v - item.v);
 
-          // Hue 权重提高，更符合人眼合并逻辑
           const score = diffH * 2.0 + diffS * 0.8 + diffV * 0.5;
           if (score < minDiff) {
             minDiff = score;
@@ -972,7 +1066,6 @@
         }
       });
     } else {
-      // 模式 A：基于 12 色相环桶（Hue Bucket）做视觉合并
       const hueBuckets = new Array(12).fill(0);
       const hueSamples = new Array(12).fill(null);
 
@@ -983,7 +1076,7 @@
         if (ignoreGray && (hsv.v < 15 || hsv.s < 12)) continue;
 
         validPixels++;
-        const bucketIdx = Math.floor(hsv.h / 30) % 12; // 每 30° 一个色相主类
+        const bucketIdx = Math.floor(hsv.h / 30) % 12;
         hueBuckets[bucketIdx]++;
 
         if (!hueSamples[bucketIdx]) {
@@ -993,7 +1086,6 @@
 
       if (validPixels === 0) validPixels = 1;
 
-      // 排序出占比最高的前 5 个主色区段
       const sorted = hueBuckets
         .map((cnt, idx) => ({ idx, count: cnt, sample: hueSamples[idx] }))
         .filter(item => item.count > 0 && item.sample)
@@ -1531,4 +1623,4 @@
   }
 </script>
 </body>
-</html>
+</html>s
